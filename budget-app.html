@@ -2398,11 +2398,7 @@
             }
 
             expenseDetailsVisible = !expenseDetailsVisible;
-            document.getElementById('expenseDetailsSection').classList.toggle('hidden', !expenseDetailsVisible);
-            document.getElementById('expenseDetailsBtn').textContent = expenseDetailsVisible ? 'Ukryj szczegóły' : 'Szczegóły';
-            if (expenseDetailsVisible) {
-                renderExpenseAnalysis();
-            }
+            renderExpenseAnalysis();
         }
 
         function renderExpenseAnalysis() {
@@ -2414,13 +2410,19 @@
             const detailsSection = document.getElementById('expenseDetailsSection');
 
             if (entries.length === 0) {
+                summaryElement.classList.remove('hidden');
                 summaryElement.innerHTML = `
                     <div class="empty-state">
                         <div class="icon">🧾</div>
                         <p>Brak wydatków w wybranym miesiącu</p>
                     </div>
                 `;
-                detailsElement.innerHTML = '';
+                detailsElement.innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">🧾</div>
+                        <p>Brak wydatków w wybranym miesiącu</p>
+                    </div>
+                `;
                 detailsButton.disabled = true;
                 detailsSection.classList.add('hidden');
                 detailsButton.textContent = 'Szczegóły';
@@ -2460,35 +2462,49 @@
             }).join('');
 
             if (!expenseDetailsVisible) {
+                summaryElement.classList.remove('hidden');
                 detailsSection.classList.add('hidden');
+                detailsButton.textContent = 'Szczegóły';
                 return;
             }
 
+            summaryElement.classList.add('hidden');
             detailsSection.classList.remove('hidden');
             detailsButton.textContent = 'Ukryj szczegóły';
+            const totalExpenses = roundCurrency(entries.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0));
             detailsElement.innerHTML = categories.map(([category, group]) => {
                 const icon = getCategoryIcon(category, 'expense');
-                const categoryEntries = [...group.entries].sort((a, b) => parseDateString(a.date) - parseDateString(b.date));
+                const categoryEntries = [...group.entries]
+                    .filter(entry => !Number.isNaN(parseDateString(entry.date).getTime()))
+                    .sort((a, b) => parseDateString(b.date) - parseDateString(a.date));
+
+                if (categoryEntries.length === 0) {
+                    return '';
+                }
+
                 return `
                     <div class="analysis-category-card">
                         <div class="analysis-category-header">
                             <span>${icon} ${escapeHtml(category)}</span>
-                            <span class="analysis-category-total">-${group.total.toFixed(2)} zł</span>
                         </div>
                         <div class="analysis-entry-list">
                             ${categoryEntries.map(entry => `
                                 <div class="analysis-entry">
-                                    <div>
-                                        <div>${escapeHtml(entry.name || category)}</div>
-                                        <div class="analysis-entry-meta">${formatEntryDate(entry.date)}</div>
-                                    </div>
+                                    <div>${formatEntryDate(entry.date)}</div>
                                     <div class="analysis-entry-amount-expense">-${roundCurrency(entry.amount).toFixed(2)} zł</div>
                                 </div>
                             `).join('')}
                         </div>
                     </div>
                 `;
-            }).join('');
+            }).join('') + `
+                <div class="analysis-category-card">
+                    <div class="analysis-category-header">
+                        <span>🧮 Suma wydatków</span>
+                        <span class="analysis-category-total">-${totalExpenses.toFixed(2)} zł</span>
+                    </div>
+                </div>
+            `;
         }
 
         function renderIncomeAnalysis() {
