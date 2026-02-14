@@ -34,6 +34,13 @@ After deploy open:
 - `/` -> app UI
 - `/api/state` -> JSON state
 
+## One-time cleanup (keep PIN, remove test data)
+Run once after deploy (or locally) to clear balance/history/plans and keep current PIN:
+
+```powershell
+python reset_state_keep_pin.py --db /data/budget.db
+```
+
 ## Local simulation of Railway env
 ```powershell
 $env:PORT="8080"
