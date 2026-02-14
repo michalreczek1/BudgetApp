@@ -1156,6 +1156,7 @@
             </div>
 
             <div class="modal-actions">
+                <button class="btn btn-secondary hidden" id="incomeDeleteBtn" onclick="deleteIncomeFromModal()">Usuń</button>
                 <button class="btn btn-secondary" onclick="closeIncomeModal()">Anuluj</button>
                 <button class="btn btn-primary" id="incomeSubmitBtn" onclick="saveIncome()">Dodaj</button>
             </div>
@@ -1219,6 +1220,7 @@
             </div>
 
             <div class="modal-actions">
+                <button class="btn btn-secondary hidden" id="paymentDeleteBtn" onclick="deletePaymentFromModal()">Usuń</button>
                 <button class="btn btn-secondary" onclick="closePaymentModal()">Anuluj</button>
                 <button class="btn btn-primary" id="paymentSubmitBtn" onclick="savePayment()">Dodaj</button>
             </div>
@@ -1775,6 +1777,8 @@
         function setIncomeModalMode(isEdit) {
             document.getElementById('incomeModalTitle').textContent = isEdit ? '💵 Edytuj wpływ' : '💵 Dodaj wpływ';
             document.getElementById('incomeSubmitBtn').textContent = isEdit ? 'Zapisz' : 'Dodaj';
+            document.getElementById('incomeDeleteBtn').classList.toggle('hidden', !isEdit);
+            document.getElementById('incomeDeleteBtn').textContent = isEdit && selectedIncomeFrequency !== 'once' ? 'Usuń serię' : 'Usuń';
         }
 
         function resetIncomeForm() {
@@ -1801,6 +1805,8 @@
         function setPaymentModalMode(isEdit) {
             document.getElementById('paymentModalTitle').textContent = isEdit ? '➕ Edytuj płatność' : '➕ Dodaj płatność';
             document.getElementById('paymentSubmitBtn').textContent = isEdit ? 'Zapisz' : 'Dodaj';
+            document.getElementById('paymentDeleteBtn').classList.toggle('hidden', !isEdit);
+            document.getElementById('paymentDeleteBtn').textContent = isEdit && selectedPaymentFrequency !== 'once' ? 'Usuń serię' : 'Usuń';
         }
 
         function resetPaymentForm() {
@@ -1835,6 +1841,9 @@
             else if (freq === 'selected') options[2].classList.add('selected');
 
             document.getElementById('monthSelectorGroup').classList.toggle('hidden', freq !== 'selected');
+            if (editingPaymentId !== null) {
+                document.getElementById('paymentDeleteBtn').textContent = freq !== 'once' ? 'Usuń serię' : 'Usuń';
+            }
         }
 
         function selectIncomeFrequency(freq) {
@@ -1844,6 +1853,9 @@
             
             if (freq === 'once') options[0].classList.add('selected');
             else if (freq === 'monthly') options[1].classList.add('selected');
+            if (editingIncomeId !== null) {
+                document.getElementById('incomeDeleteBtn').textContent = freq !== 'once' ? 'Usuń serię' : 'Usuń';
+            }
         }
 
         function toggleMonth(month) {
@@ -2943,7 +2955,6 @@
                             </div>
                         </div>
                         <div class="payment-amount income">+${income.amount.toFixed(2)} zł</div>
-                        ${!income.isRecurring ? `<button class="delete-btn" onclick="event.stopPropagation(); deleteIncome(${income.id})">Usuń</button>` : ''}
                     </div>
                 `).join('');
             }
@@ -3012,7 +3023,6 @@
                     </div>
                     <div class="payment-amount expense">-${payment.amount.toFixed(2)} zł</div>
                     ${parseDateString(payment.date) <= today ? `<button class="paid-btn" onclick="event.stopPropagation(); markPaymentAsPaid(${payment.id}, '${payment.date}')">Opłacone</button>` : ''}
-                    ${!payment.isRecurring ? `<button class="delete-btn" onclick="event.stopPropagation(); deletePayment(${payment.id})">Usuń</button>` : ''}
                 </div>
             `).join('');
         }
@@ -3020,19 +3030,67 @@
         function deletePayment(id) {
             const stored = appStorage.getItem(STORAGE_KEYS.PAYMENTS);
             let payments = stored ? JSON.parse(stored) : [];
+            const payment = payments.find(p => p.id === id);
+            if (!payment) {
+                return false;
+            }
+
+            const isRecurring = payment.frequency !== 'once';
+            const shouldDelete = confirm(isRecurring
+                ? 'Usunąć całą serię płatności?'
+                : 'Usunąć tę płatność?');
+            if (!shouldDelete) {
+                return false;
+            }
+
             payments = payments.filter(p => p.id !== id);
             appStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
             loadPayments();
             updateCalculations();
+            return true;
         }
 
         function deleteIncome(id) {
             const stored = appStorage.getItem(STORAGE_KEYS.INCOMES);
             let incomes = stored ? JSON.parse(stored) : [];
+            const income = incomes.find(i => i.id === id);
+            if (!income) {
+                return false;
+            }
+
+            const isRecurring = income.frequency !== 'once';
+            const shouldDelete = confirm(isRecurring
+                ? 'Usunąć całą serię wpływów?'
+                : 'Usunąć ten wpływ?');
+            if (!shouldDelete) {
+                return false;
+            }
+
             incomes = incomes.filter(i => i.id !== id);
             appStorage.setItem(STORAGE_KEYS.INCOMES, JSON.stringify(incomes));
             loadIncomes();
             updateCalculations();
+            return true;
+        }
+
+        function deletePaymentFromModal() {
+            if (editingPaymentId === null) {
+                return;
+            }
+
+            if (deletePayment(editingPaymentId)) {
+                closePaymentModal();
+            }
+        }
+
+        function deleteIncomeFromModal() {
+            if (editingIncomeId === null) {
+                return;
+            }
+
+            if (deleteIncome(editingIncomeId)) {
+                closeIncomeModal();
+            }
         }
 
         function updateCalculations() {
