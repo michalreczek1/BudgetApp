@@ -1,0 +1,3006 @@
+﻿<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Budżet Domowy</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0f1419;
+            --bg-secondary: #1a2332;
+            --bg-card: #1e2a3a;
+            --bg-card-hover: #243447;
+            --accent-blue: #4a9eff;
+            --accent-green: #00d4aa;
+            --accent-red: #ff5252;
+            --accent-purple: #a78bfa;
+            --accent-yellow: #fbbf24;
+            --text-primary: #e1e8f0;
+            --text-secondary: #8b96a5;
+            --border-color: #2d3f54;
+            --shadow: rgba(0, 0, 0, 0.4);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 20px;
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(74, 158, 255, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 90% 80%, rgba(167, 139, 250, 0.08) 0%, transparent 50%);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Login Screen */
+        .login-screen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: -20px;
+            background: var(--bg-primary);
+        }
+
+        .login-card {
+            background: var(--bg-card);
+            border-radius: 24px;
+            padding: 48px;
+            max-width: 420px;
+            width: 100%;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 20px 60px var(--shadow);
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .login-header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .login-header p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        .pin-input-container {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin: 32px 0;
+        }
+
+        .pin-digit {
+            width: 60px;
+            height: 70px;
+            background: var(--bg-secondary);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            font-size: 2rem;
+            text-align: center;
+            color: var(--text-primary);
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .pin-digit:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            background: var(--bg-card);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-blue), #3b82f6);
+            color: white;
+            box-shadow: 0 4px 20px rgba(74, 158, 255, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(74, 158, 255, 0.4);
+        }
+
+        .error-message {
+            background: rgba(255, 82, 82, 0.1);
+            border: 1px solid rgba(255, 82, 82, 0.3);
+            color: var(--accent-red);
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 16px;
+            font-size: 0.9rem;
+            display: none;
+            text-align: center;
+        }
+
+        /* Main App */
+        .app-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+            padding: 20px 0;
+        }
+
+        .app-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .app-title h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .app-title .badge {
+            background: var(--accent-green);
+            color: var(--bg-primary);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .month-nav {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-right: 4px;
+        }
+
+        .month-label-btn {
+            height: 44px;
+            padding: 0 14px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            min-width: 150px;
+            transition: all 0.3s ease;
+        }
+
+        .month-label-btn:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--accent-blue);
+        }
+
+        .month-label-btn.current-month {
+            border-color: var(--accent-blue);
+            color: var(--accent-blue);
+        }
+
+        .icon-btn {
+            width: 44px;
+            height: 44px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            color: var(--text-primary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            transition: all 0.3s ease;
+        }
+
+        .icon-btn:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--accent-blue);
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 24px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .stat-card:hover {
+            border-color: var(--accent-blue);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px var(--shadow);
+        }
+
+        .stat-card:hover::before {
+            opacity: 1;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+            font-size: 2.2rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .stat-value.positive {
+            color: var(--accent-green);
+        }
+
+        .stat-value.negative {
+            color: var(--accent-red);
+        }
+
+        .stat-subtext {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        /* Payments Section */
+        .payments-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 28px;
+            margin-bottom: 24px;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .section-header h2 {
+            font-size: 1.3rem;
+            font-weight: 700;
+        }
+
+        .payment-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .payment-item {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+        }
+
+        .payment-item:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--accent-blue);
+        }
+
+        .payment-item.editable {
+            cursor: pointer;
+        }
+
+        .payment-info {
+            flex: 1;
+        }
+
+        .payment-name {
+            font-size: 1.05rem;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .payment-meta {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .payment-date {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .payment-frequency {
+            font-size: 0.8rem;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        .freq-monthly {
+            background: rgba(74, 158, 255, 0.15);
+            color: var(--accent-blue);
+        }
+
+        .freq-selected {
+            background: rgba(251, 191, 36, 0.15);
+            color: var(--accent-yellow);
+        }
+
+        .freq-income {
+            background: rgba(0, 212, 170, 0.15);
+            color: var(--accent-green);
+        }
+
+        .payment-amount {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-right: 16px;
+        }
+
+        .payment-amount.income {
+            color: var(--accent-green);
+        }
+
+        .payment-amount.expense {
+            color: var(--accent-red);
+        }
+
+        .delete-btn {
+            background: rgba(255, 82, 82, 0.1);
+            border: 1px solid rgba(255, 82, 82, 0.3);
+            color: var(--accent-red);
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .delete-btn:hover {
+            background: rgba(255, 82, 82, 0.2);
+        }
+
+        .paid-btn {
+            background: rgba(0, 212, 170, 0.12);
+            border: 1px solid rgba(0, 212, 170, 0.35);
+            color: var(--accent-green);
+            padding: 8px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-right: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .paid-btn:hover {
+            background: rgba(0, 212, 170, 0.2);
+        }
+
+        /* Action Buttons */
+        .action-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        .action-btn {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .action-btn:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--accent-blue);
+            transform: translateY(-2px);
+        }
+
+        .action-btn .icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+
+        .action-btn .text {
+            flex: 1;
+        }
+
+        .action-btn .text h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .action-btn .text p {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 32px;
+            max-width: 600px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px var(--shadow);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 28px;
+        }
+
+        .modal-header h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .close-btn {
+            width: 36px;
+            height: 36px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            transition: all 0.3s ease;
+        }
+
+        .close-btn:hover {
+            background: var(--bg-card-hover);
+            color: var(--text-primary);
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        .input-group input,
+        .input-group select {
+            width: 100%;
+            padding: 14px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.3s ease;
+        }
+
+        .input-group input::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.5;
+        }
+
+        .input-group input:focus,
+        .input-group select:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            background: var(--bg-card);
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 28px;
+        }
+
+        .modal-actions .btn {
+            flex: 1;
+        }
+
+        .btn-secondary {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--accent-blue);
+        }
+
+        .success-message {
+            background: rgba(0, 212, 170, 0.1);
+            border: 1px solid rgba(0, 212, 170, 0.3);
+            color: var(--accent-green);
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 16px;
+            font-size: 0.9rem;
+            display: none;
+            text-align: center;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state .icon {
+            font-size: 3rem;
+            margin-bottom: 12px;
+            opacity: 0.5;
+        }
+
+        .month-selector {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .month-btn {
+            padding: 10px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .month-btn.selected {
+            background: var(--accent-blue);
+            color: white;
+            border-color: var(--accent-blue);
+        }
+
+        .month-btn:hover:not(.selected) {
+            background: var(--bg-card-hover);
+            border-color: var(--accent-blue);
+        }
+
+        .radio-group {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .radio-option {
+            flex: 1;
+            padding: 14px;
+            background: var(--bg-secondary);
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .radio-option:hover {
+            border-color: var(--accent-blue);
+        }
+
+        .radio-option.selected {
+            background: var(--accent-blue);
+            color: white;
+            border-color: var(--accent-blue);
+        }
+
+        .analysis-hint {
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+            line-height: 1.5;
+        }
+
+        .category-tiles {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .category-tile {
+            padding: 14px 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            cursor: pointer;
+            text-align: center;
+            font-weight: 600;
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            transition: all 0.25s ease;
+        }
+
+        .category-tile:hover {
+            border-color: var(--accent-blue);
+            background: var(--bg-card-hover);
+        }
+
+        .category-tile.selected {
+            border-color: var(--accent-blue);
+            background: rgba(74, 158, 255, 0.18);
+            color: #d6eaff;
+        }
+
+        .analysis-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 6px;
+        }
+
+        .analysis-category-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 14px;
+        }
+
+        .analysis-category-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            font-weight: 600;
+        }
+
+        .analysis-category-total {
+            color: var(--accent-red);
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .analysis-income-total {
+            color: var(--accent-green);
+        }
+
+        .analysis-entry-list {
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .analysis-entry {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 10px;
+            padding: 8px 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9rem;
+        }
+
+        .analysis-entry-meta {
+            color: var(--text-secondary);
+            font-size: 0.82rem;
+        }
+
+        .analysis-entry-amount-expense {
+            color: var(--accent-red);
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .analysis-entry-amount-income {
+            color: var(--accent-green);
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .analysis-divider {
+            height: 1px;
+            margin: 14px 0 6px;
+            background: var(--border-color);
+        }
+
+        .income-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .income-item {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .income-item-info {
+            flex: 1;
+        }
+
+        .income-item-name {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .income-item-date {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .income-item-amount {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--accent-green);
+            margin-right: 12px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .action-buttons {
+                grid-template-columns: 1fr;
+            }
+
+            .app-header {
+                flex-direction: column;
+                gap: 16px;
+                align-items: flex-start;
+            }
+
+            .header-actions {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+
+            .month-label-btn {
+                min-width: 130px;
+            }
+
+            .stat-value {
+                font-size: 1.8rem;
+            }
+
+            .modal-content {
+                padding: 24px;
+            }
+
+            .month-selector {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .radio-group {
+                flex-direction: column;
+            }
+        }
+
+        select option {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-blue);
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div class="login-screen" id="loginScreen">
+        <div class="login-card">
+            <div class="login-header">
+                <h1>💰 Budżet Domowy</h1>
+                <p>Wprowadź PIN aby kontynuować</p>
+            </div>
+            
+            <div class="pin-input-container">
+                <input type="password" class="pin-digit" maxlength="1" id="pin1" inputmode="numeric">
+                <input type="password" class="pin-digit" maxlength="1" id="pin2" inputmode="numeric">
+                <input type="password" class="pin-digit" maxlength="1" id="pin3" inputmode="numeric">
+                <input type="password" class="pin-digit" maxlength="1" id="pin4" inputmode="numeric">
+            </div>
+
+            <button class="btn btn-primary" onclick="login()">Zaloguj się</button>
+            
+            <div class="error-message" id="loginError">Nieprawidłowy PIN. Spróbuj ponownie.</div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div class="container hidden" id="mainApp">
+        <div class="app-header">
+            <div class="app-title">
+                <h1>💰 Budżet Domowy</h1>
+                <span class="badge">LIVE</span>
+            </div>
+            <div class="header-actions">
+                <div class="month-nav">
+                    <button class="icon-btn" onclick="changeViewMonth(-1)" title="Poprzedni miesiąc">◀</button>
+                    <button class="month-label-btn" id="monthLabelBtn" onclick="goToCurrentMonth()" title="Przejdź do bieżącego miesiąca">
+                        <span id="currentViewMonth">-</span>
+                    </button>
+                    <button class="icon-btn" onclick="changeViewMonth(1)" title="Następny miesiąc">▶</button>
+                </div>
+                <button class="icon-btn" onclick="openAdminPanel()" title="Ustawienia">⚙️</button>
+                <button class="icon-btn" onclick="openExpenseAnalysisModal()" title="Analiza wydatków">📊</button>
+                <button class="icon-btn" onclick="openIncomeAnalysisModal()" title="Analiza wpływów">📈</button>
+                <button class="icon-btn" onclick="logout()" title="Wyloguj">🚪</button>
+            </div>
+        </div>
+
+        <!-- Statistics Cards -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Aktualny stan konta</div>
+                <div class="stat-value" id="currentBalance">0.00 zł</div>
+                <div class="stat-subtext">Ostatnia aktualizacja</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-label">Do najbliższego wpływu</div>
+                <div class="stat-value" id="daysToIncome">-- dni</div>
+                <div class="stat-subtext" id="nextIncomeDate">Brak zaplanowanych wpływów</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-label">Zostaje po płatnościach</div>
+                <div class="stat-value" id="afterPayments">0.00 zł</div>
+                <div class="stat-subtext">Po uwzględnieniu zobowiązań</div>
+            </div>
+        </div>
+
+        <!-- Payments List -->
+        <div class="payments-section">
+            <div class="section-header">
+                <h2>📋 Zaplanowane płatności</h2>
+            </div>
+            <div class="payment-list" id="paymentsList">
+                <div class="empty-state">
+                    <div class="icon">📭</div>
+                    <p>Brak zaplanowanych płatności</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Income List -->
+        <div class="payments-section">
+            <div class="section-header">
+                <h2>💵 Zaplanowane wpływy</h2>
+            </div>
+            <div class="payment-list" id="incomeList">
+                <div class="empty-state">
+                    <div class="icon">💰</div>
+                    <p>Brak zaplanowanych wpływów</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="action-buttons">
+            <div class="action-btn" onclick="openBalanceModal()">
+                <div class="icon">💳</div>
+                <div class="text">
+                    <h3>Aktualizuj stan</h3>
+                    <p>Wprowadź aktualny stan konta</p>
+                </div>
+            </div>
+
+            <div class="action-btn" onclick="openIncomeModal()">
+                <div class="icon">💵</div>
+                <div class="text">
+                    <h3>Dodaj wpływ</h3>
+                    <p>Zaplanuj wypłatę lub wpływ</p>
+                </div>
+            </div>
+
+            <div class="action-btn" onclick="openPaymentModal()">
+                <div class="icon">➕</div>
+                <div class="text">
+                    <h3>Dodaj płatność</h3>
+                    <p>Zaplanuj wydatek</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Update Balance Modal -->
+    <div class="modal" id="balanceModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>💳 Aktualizuj stan konta</h2>
+                <button class="close-btn" onclick="closeBalanceModal()">✕</button>
+            </div>
+            
+            <div class="input-group">
+                <label>Aktualny stan konta (zł)</label>
+                <input type="number" id="balanceInput" placeholder="0.00" step="0.01">
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeBalanceModal()">Anuluj</button>
+                <button class="btn btn-primary" onclick="updateBalance()">Zapisz</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="balanceCategoryModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="balanceCategoryTitle">Kategoria zmiany</h2>
+                <button class="close-btn" onclick="closeBalanceCategoryModal()">✕</button>
+            </div>
+
+            <p class="analysis-hint" id="balanceCategoryInfo"></p>
+
+            <div class="category-tiles" id="balanceCategoryTiles"></div>
+
+            <div class="input-group hidden" id="balanceCategoryOtherGroup">
+                <label id="balanceCategoryOtherLabel">Wpisz nazwę kategorii</label>
+                <input type="text" id="balanceCategoryOtherInput" placeholder="np. Fryzjer, Sprzedaż roweru">
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="cancelBalanceCategory()">Anuluj</button>
+                <button class="btn btn-primary" onclick="confirmBalanceCategory()">Zapisz</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="expenseAnalysisModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📊 Analiza wydatków</h2>
+                <button class="close-btn" onclick="closeExpenseAnalysisModal()">✕</button>
+            </div>
+
+            <div class="input-group">
+                <label>Wybierz miesiąc</label>
+                <input type="month" id="expenseAnalysisMonth" onchange="renderExpenseAnalysis()">
+            </div>
+
+            <div class="analysis-list" id="expenseAnalysisSummary"></div>
+
+            <div id="expenseDetailsSection" class="hidden">
+                <div class="analysis-divider"></div>
+                <h3>Szczegóły wydatków</h3>
+                <div class="analysis-list" id="expenseAnalysisDetails"></div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-secondary" id="expenseDetailsBtn" onclick="toggleExpenseDetails()">Szczegóły</button>
+                <button class="btn btn-secondary" onclick="openIncomeAnalysisFromExpense()">Analiza wpływów</button>
+                <button class="btn btn-primary" onclick="closeExpenseAnalysisModal()">Zamknij</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="incomeAnalysisModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📈 Analiza wpływów</h2>
+                <button class="close-btn" onclick="closeIncomeAnalysisModal()">✕</button>
+            </div>
+
+            <div class="input-group">
+                <label>Wybierz miesiąc</label>
+                <input type="month" id="incomeAnalysisMonth" onchange="renderIncomeAnalysis()">
+            </div>
+
+            <div class="analysis-list" id="incomeAnalysisList"></div>
+
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="closeIncomeAnalysisModal()">Zamknij</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Income Modal -->
+    <div class="modal" id="incomeModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="incomeModalTitle">💵 Dodaj wpływ</h2>
+                <button class="close-btn" onclick="closeIncomeModal()">✕</button>
+            </div>
+            
+            <div class="input-group">
+                <label>Nazwa wpływu</label>
+                <input type="text" id="incomeName" placeholder="np. Wypłata, Premia, Zwrot">
+            </div>
+
+            <div class="input-group">
+                <label>Kwota (zł)</label>
+                <input type="number" id="incomeAmount" placeholder="0.00" step="0.01">
+            </div>
+
+            <div class="input-group">
+                <label>Data wpływu</label>
+                <input type="text" id="incomeDate" placeholder="np. 05/03/2026" inputmode="numeric" maxlength="10" oninput="formatDateInput(this)" onblur="normalizeDateInput(this)">
+            </div>
+
+            <div class="input-group">
+                <label>Częstotliwość</label>
+                <div class="radio-group">
+                    <div class="radio-option selected" onclick="selectIncomeFrequency('once')">
+                        Jednorazowy
+                    </div>
+                    <div class="radio-option" onclick="selectIncomeFrequency('monthly')">
+                        Co miesiąc
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeIncomeModal()">Anuluj</button>
+                <button class="btn btn-primary" id="incomeSubmitBtn" onclick="saveIncome()">Dodaj</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Payment Modal -->
+    <div class="modal" id="paymentModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="paymentModalTitle">➕ Dodaj płatność</h2>
+                <button class="close-btn" onclick="closePaymentModal()">✕</button>
+            </div>
+            
+            <div class="input-group">
+                <label>Nazwa płatności</label>
+                <input type="text" id="paymentName" placeholder="np. Czynsz, Prąd, Internet">
+            </div>
+
+            <div class="input-group">
+                <label>Kwota (zł)</label>
+                <input type="number" id="paymentAmount" placeholder="0.00" step="0.01">
+            </div>
+
+            <div class="input-group">
+                <label>Data płatności</label>
+                <input type="text" id="paymentDate" placeholder="np. 05/03/2026" inputmode="numeric" maxlength="10" oninput="formatDateInput(this)" onblur="normalizeDateInput(this)">
+            </div>
+
+            <div class="input-group">
+                <label>Częstotliwość</label>
+                <div class="radio-group">
+                    <div class="radio-option selected" onclick="selectPaymentFrequency('once')">
+                        Jednorazowy
+                    </div>
+                    <div class="radio-option" onclick="selectPaymentFrequency('monthly')">
+                        Co miesiąc
+                    </div>
+                    <div class="radio-option" onclick="selectPaymentFrequency('selected')">
+                        Wybrane miesiące
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-group hidden" id="monthSelectorGroup">
+                <label>Wybierz miesiące</label>
+                <div class="month-selector">
+                    <div class="month-btn" onclick="toggleMonth(1)">Sty</div>
+                    <div class="month-btn" onclick="toggleMonth(2)">Lut</div>
+                    <div class="month-btn" onclick="toggleMonth(3)">Mar</div>
+                    <div class="month-btn" onclick="toggleMonth(4)">Kwi</div>
+                    <div class="month-btn" onclick="toggleMonth(5)">Maj</div>
+                    <div class="month-btn" onclick="toggleMonth(6)">Cze</div>
+                    <div class="month-btn" onclick="toggleMonth(7)">Lip</div>
+                    <div class="month-btn" onclick="toggleMonth(8)">Sie</div>
+                    <div class="month-btn" onclick="toggleMonth(9)">Wrz</div>
+                    <div class="month-btn" onclick="toggleMonth(10)">Paź</div>
+                    <div class="month-btn" onclick="toggleMonth(11)">Lis</div>
+                    <div class="month-btn" onclick="toggleMonth(12)">Gru</div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closePaymentModal()">Anuluj</button>
+                <button class="btn btn-primary" id="paymentSubmitBtn" onclick="savePayment()">Dodaj</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Panel Modal -->
+    <div class="modal" id="adminModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚙️ Panel Administratora</h2>
+                <button class="close-btn" onclick="closeAdminPanel()">✕</button>
+            </div>
+            
+            <div class="input-group">
+                <label>Aktualny PIN</label>
+                <input type="password" id="currentPin" placeholder="••••" maxlength="4" inputmode="numeric">
+            </div>
+            
+            <div class="input-group">
+                <label>Nowy PIN</label>
+                <input type="password" id="newPin" placeholder="••••" maxlength="4" inputmode="numeric">
+            </div>
+            
+            <div class="input-group">
+                <label>Potwierdź nowy PIN</label>
+                <input type="password" id="confirmPin" placeholder="••••" maxlength="4" inputmode="numeric">
+            </div>
+
+            <div class="error-message" id="adminError"></div>
+            <div class="success-message" id="adminSuccess">PIN został pomyślnie zmieniony!</div>
+
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeAdminPanel()">Anuluj</button>
+                <button class="btn btn-primary" onclick="changePin()">Zmień PIN</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const STORAGE_KEYS = {
+            PIN: 'budget_pin',
+            BALANCE: 'budget_balance',
+            PAYMENTS: 'budget_payments',
+            INCOMES: 'budget_incomes',
+            EXPENSE_ENTRIES: 'budget_expense_entries',
+            INCOME_ENTRIES: 'budget_income_entries',
+            EXPENSE_TOTALS: 'budget_expense_totals',
+            INCOME_TOTALS: 'budget_income_totals'
+        };
+
+        const EXPENSE_CATEGORY_OPTIONS = [
+            { value: 'jedzenie', label: '🍽️ Jedzenie', icon: '🍽️' },
+            { value: 'paliwo', label: '⛽ Paliwo', icon: '⛽' },
+            { value: 'lekarstwa', label: '💊 Lekarstwa', icon: '💊' },
+            { value: 'suplementy', label: '💪 Suplementy', icon: '💪' },
+            { value: 'ubrania', label: '👕 Ubrania', icon: '👕' },
+            { value: 'inne', label: '✨ Inne', icon: '✨' }
+        ];
+        const INCOME_CATEGORY_OPTIONS = [
+            { value: 'premia', label: '🎁 Premia', icon: '🎁' },
+            { value: 'rodzice', label: '👨‍👩‍👧 Rodzice', icon: '👨‍👩‍👧' },
+            { value: 'inne', label: '✨ Inne', icon: '✨' }
+        ];
+
+        let selectedPaymentFrequency = 'once';
+        let selectedIncomeFrequency = 'once';
+        let selectedMonths = [];
+        let editingIncomeId = null;
+        let editingPaymentId = null;
+        let selectedBalanceCategory = null;
+        let pendingBalanceCategoryChange = null;
+        let expenseDetailsVisible = false;
+        let currentViewDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+        let noonWatcherStarted = false;
+        let stateReady = false;
+        let saveTimerId = null;
+        let saveInProgress = false;
+        let savePending = false;
+        let appState = {
+            pin: '1234',
+            balance: 0,
+            payments: [],
+            incomes: [],
+            expenseEntries: [],
+            incomeEntries: [],
+            expenseCategoryTotals: {},
+            incomeCategoryTotals: {}
+        };
+
+        function sanitizeState(rawState) {
+            const balance = Number(rawState && rawState.balance);
+            const sanitizeTotals = (rawTotals) => {
+                if (!rawTotals || typeof rawTotals !== 'object' || Array.isArray(rawTotals)) {
+                    return {};
+                }
+
+                const cleaned = {};
+                Object.entries(rawTotals).forEach(([category, value]) => {
+                    const parsed = Number(value);
+                    if (Number.isFinite(parsed)) {
+                        cleaned[String(category)] = Math.round(parsed * 100) / 100;
+                    }
+                });
+                return cleaned;
+            };
+
+            const sanitizeEntries = (rawEntries) => {
+                if (!Array.isArray(rawEntries)) {
+                    return [];
+                }
+
+                return rawEntries
+                    .filter(entry => entry && typeof entry === 'object')
+                    .map(entry => {
+                        const parsedAmount = Number(entry.amount);
+                        const amount = Number.isFinite(parsedAmount) ? Math.round(parsedAmount * 100) / 100 : 0;
+                        return {
+                            id: Number.isFinite(Number(entry.id)) ? Number(entry.id) : Date.now(),
+                            amount: amount,
+                            category: typeof entry.category === 'string' && entry.category.trim() ? entry.category.trim() : 'inne',
+                            date: typeof entry.date === 'string' && entry.date ? entry.date : formatDateString(new Date()),
+                            source: typeof entry.source === 'string' && entry.source ? entry.source : 'balance-update',
+                            name: typeof entry.name === 'string' ? entry.name : '',
+                            icon: typeof entry.icon === 'string' ? entry.icon : ''
+                        };
+                    });
+            };
+
+            return {
+                pin: typeof rawState?.pin === 'string' && rawState.pin.length > 0 ? rawState.pin : '1234',
+                balance: Number.isFinite(balance) ? balance : 0,
+                payments: Array.isArray(rawState?.payments) ? rawState.payments : [],
+                incomes: Array.isArray(rawState?.incomes) ? rawState.incomes : [],
+                expenseEntries: sanitizeEntries(rawState?.expenseEntries),
+                incomeEntries: sanitizeEntries(rawState?.incomeEntries),
+                expenseCategoryTotals: sanitizeTotals(rawState?.expenseCategoryTotals),
+                incomeCategoryTotals: sanitizeTotals(rawState?.incomeCategoryTotals)
+            };
+        }
+
+        function isStateEffectivelyEmpty(state) {
+            return (
+                state.pin === '1234' &&
+                Number(state.balance) === 0 &&
+                Array.isArray(state.payments) &&
+                state.payments.length === 0 &&
+                Array.isArray(state.incomes) &&
+                state.incomes.length === 0 &&
+                Array.isArray(state.expenseEntries) &&
+                state.expenseEntries.length === 0 &&
+                Array.isArray(state.incomeEntries) &&
+                state.incomeEntries.length === 0 &&
+                Object.keys(state.expenseCategoryTotals || {}).length === 0 &&
+                Object.keys(state.incomeCategoryTotals || {}).length === 0
+            );
+        }
+
+        function migrateLegacyLocalStorageIfNeeded() {
+            if (!isStateEffectivelyEmpty(appState)) {
+                return false;
+            }
+
+            try {
+                const legacyPin = window.localStorage.getItem(STORAGE_KEYS.PIN);
+                const legacyBalanceRaw = window.localStorage.getItem(STORAGE_KEYS.BALANCE);
+                const legacyPaymentsRaw = window.localStorage.getItem(STORAGE_KEYS.PAYMENTS);
+                const legacyIncomesRaw = window.localStorage.getItem(STORAGE_KEYS.INCOMES);
+
+                if (!legacyPin && !legacyBalanceRaw && !legacyPaymentsRaw && !legacyIncomesRaw) {
+                    return false;
+                }
+
+                let legacyPayments = [];
+                let legacyIncomes = [];
+                try {
+                    legacyPayments = legacyPaymentsRaw ? JSON.parse(legacyPaymentsRaw) : [];
+                } catch {
+                    legacyPayments = [];
+                }
+                try {
+                    legacyIncomes = legacyIncomesRaw ? JSON.parse(legacyIncomesRaw) : [];
+                } catch {
+                    legacyIncomes = [];
+                }
+
+                const legacyState = sanitizeState({
+                    pin: legacyPin || '1234',
+                    balance: legacyBalanceRaw,
+                    payments: legacyPayments,
+                    incomes: legacyIncomes
+                });
+
+                appState = legacyState;
+                return true;
+            } catch (error) {
+                console.error('Migracja localStorage -> API nie powiodła się:', error);
+                return false;
+            }
+        }
+
+        async function fetchStateFromServer() {
+            const response = await fetch('/api/state', {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+                cache: 'no-store'
+            });
+
+            if (!response.ok) {
+                throw new Error(`GET /api/state failed: ${response.status}`);
+            }
+
+            const data = await response.json();
+            appState = sanitizeState(data);
+        }
+
+        async function saveStateToServer() {
+            const payload = JSON.parse(JSON.stringify(appState));
+            const response = await fetch('/api/state', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                throw new Error(`PUT /api/state failed: ${response.status}`);
+            }
+        }
+
+        async function flushStateSave() {
+            if (saveInProgress || !savePending) {
+                return;
+            }
+
+            saveInProgress = true;
+            savePending = false;
+
+            try {
+                await saveStateToServer();
+            } catch (error) {
+                console.error('Błąd zapisu danych na serwerze:', error);
+                savePending = true;
+            } finally {
+                saveInProgress = false;
+                if (savePending) {
+                    setTimeout(flushStateSave, 800);
+                }
+            }
+        }
+
+        function queueStateSave() {
+            if (!stateReady) {
+                return;
+            }
+
+            savePending = true;
+            if (saveTimerId) {
+                clearTimeout(saveTimerId);
+            }
+
+            saveTimerId = setTimeout(() => {
+                saveTimerId = null;
+                flushStateSave();
+            }, 200);
+        }
+
+        const appStorage = {
+            getItem(key) {
+                if (key === STORAGE_KEYS.PIN) {
+                    return appState.pin;
+                }
+                if (key === STORAGE_KEYS.BALANCE) {
+                    return String(appState.balance);
+                }
+                if (key === STORAGE_KEYS.PAYMENTS) {
+                    return JSON.stringify(appState.payments);
+                }
+                if (key === STORAGE_KEYS.INCOMES) {
+                    return JSON.stringify(appState.incomes);
+                }
+                if (key === STORAGE_KEYS.EXPENSE_ENTRIES) {
+                    return JSON.stringify(appState.expenseEntries);
+                }
+                if (key === STORAGE_KEYS.INCOME_ENTRIES) {
+                    return JSON.stringify(appState.incomeEntries);
+                }
+                if (key === STORAGE_KEYS.EXPENSE_TOTALS) {
+                    return JSON.stringify(appState.expenseCategoryTotals);
+                }
+                if (key === STORAGE_KEYS.INCOME_TOTALS) {
+                    return JSON.stringify(appState.incomeCategoryTotals);
+                }
+                return null;
+            },
+            setItem(key, value) {
+                if (key === STORAGE_KEYS.PIN) {
+                    appState.pin = String(value || '1234');
+                } else if (key === STORAGE_KEYS.BALANCE) {
+                    const parsed = parseFloat(value);
+                    appState.balance = Number.isFinite(parsed) ? parsed : 0;
+                } else if (key === STORAGE_KEYS.PAYMENTS) {
+                    try {
+                        const parsed = JSON.parse(value);
+                        appState.payments = Array.isArray(parsed) ? parsed : [];
+                    } catch {
+                        appState.payments = [];
+                    }
+                } else if (key === STORAGE_KEYS.INCOMES) {
+                    try {
+                        const parsed = JSON.parse(value);
+                        appState.incomes = Array.isArray(parsed) ? parsed : [];
+                    } catch {
+                        appState.incomes = [];
+                    }
+                } else if (key === STORAGE_KEYS.EXPENSE_ENTRIES) {
+                    try {
+                        const parsed = JSON.parse(value);
+                        appState.expenseEntries = Array.isArray(parsed) ? parsed : [];
+                    } catch {
+                        appState.expenseEntries = [];
+                    }
+                } else if (key === STORAGE_KEYS.INCOME_ENTRIES) {
+                    try {
+                        const parsed = JSON.parse(value);
+                        appState.incomeEntries = Array.isArray(parsed) ? parsed : [];
+                    } catch {
+                        appState.incomeEntries = [];
+                    }
+                } else if (key === STORAGE_KEYS.EXPENSE_TOTALS) {
+                    try {
+                        const parsed = JSON.parse(value);
+                        appState.expenseCategoryTotals = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+                    } catch {
+                        appState.expenseCategoryTotals = {};
+                    }
+                } else if (key === STORAGE_KEYS.INCOME_TOTALS) {
+                    try {
+                        const parsed = JSON.parse(value);
+                        appState.incomeCategoryTotals = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+                    } catch {
+                        appState.incomeCategoryTotals = {};
+                    }
+                }
+
+                queueStateSave();
+            }
+        };
+
+        async function initializeStorage() {
+            try {
+                await fetchStateFromServer();
+            } catch (error) {
+                console.error('Nie udało się pobrać danych z API:', error);
+                alert('Brak połączenia z API. Uruchom serwer aplikacji (server.py).');
+            }
+
+            appState = sanitizeState(appState);
+            migrateLegacyLocalStorageIfNeeded();
+            ensureTrackingDataConsistency();
+            stateReady = true;
+            queueStateSave();
+        }
+
+        // PIN input auto-focus
+        document.querySelectorAll('.pin-digit').forEach((input, index, inputs) => {
+            input.addEventListener('input', function() {
+                if (this.value.length === 1 && index < inputs.length - 1) {
+                    inputs[index + 1].focus();
+                }
+            });
+
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Backspace' && this.value === '' && index > 0) {
+                    inputs[index - 1].focus();
+                }
+            });
+        });
+
+        function login() {
+            if (!stateReady) {
+                document.getElementById('loginError').textContent = 'Trwa ładowanie danych, spróbuj ponownie.';
+                document.getElementById('loginError').style.display = 'block';
+                return;
+            }
+
+            const pin = ['pin1', 'pin2', 'pin3', 'pin4']
+                .map(id => document.getElementById(id).value)
+                .join('');
+
+            const storedPin = appStorage.getItem(STORAGE_KEYS.PIN) || '1234';
+            
+            if (pin === storedPin) {
+                document.getElementById('loginScreen').classList.add('hidden');
+                document.getElementById('mainApp').classList.remove('hidden');
+                document.getElementById('loginError').style.display = 'none';
+                loadData();
+                startNoonWatcher();
+            } else {
+                document.getElementById('loginError').style.display = 'block';
+                document.querySelectorAll('.pin-digit').forEach(input => {
+                    input.value = '';
+                });
+                document.getElementById('pin1').focus();
+            }
+        }
+
+        function logout() {
+            document.getElementById('mainApp').classList.add('hidden');
+            document.getElementById('loginScreen').classList.remove('hidden');
+            document.querySelectorAll('.pin-digit').forEach(input => {
+                input.value = '';
+            });
+            document.getElementById('pin1').focus();
+        }
+
+        function loadData() {
+            processDuePaymentsAtNoon();
+            updateViewMonthLabel();
+            loadBalance();
+            loadPayments();
+            loadIncomes();
+            updateCalculations();
+        }
+
+        // Modal Functions
+        function openBalanceModal() {
+            document.getElementById('balanceModal').classList.add('active');
+            const current = parseFloat(appStorage.getItem(STORAGE_KEYS.BALANCE)) || 0;
+            document.getElementById('balanceInput').value = current;
+        }
+
+        function closeBalanceModal() {
+            document.getElementById('balanceModal').classList.remove('active');
+        }
+
+        function openBalanceCategoryModal(changeType, amount, newBalance) {
+            pendingBalanceCategoryChange = {
+                changeType: changeType,
+                amount: roundCurrency(amount),
+                newBalance: roundCurrency(newBalance)
+            };
+            selectedBalanceCategory = null;
+
+            const title = changeType === 'expense'
+                ? '🧾 Kategoria wydatku'
+                : '💵 Kategoria wpływu';
+            const prompt = changeType === 'expense'
+                ? `Saldo zmniejszyło się o ${amount.toFixed(2)} zł. Wybierz kategorię wydatku.`
+                : `Saldo zwiększyło się o ${amount.toFixed(2)} zł. Wybierz kategorię wpływu.`;
+
+            document.getElementById('balanceCategoryTitle').textContent = title;
+            document.getElementById('balanceCategoryInfo').textContent = prompt;
+            document.getElementById('balanceCategoryOtherLabel').textContent = changeType === 'expense'
+                ? 'Podaj nazwę kategorii wydatku'
+                : 'Podaj nazwę kategorii wpływu';
+            document.getElementById('balanceCategoryOtherInput').value = '';
+            document.getElementById('balanceCategoryOtherGroup').classList.add('hidden');
+
+            const options = changeType === 'expense' ? EXPENSE_CATEGORY_OPTIONS : INCOME_CATEGORY_OPTIONS;
+            const tiles = document.getElementById('balanceCategoryTiles');
+            tiles.innerHTML = options.map(option => `
+                <button type="button" class="category-tile" data-value="${option.value}" onclick="selectBalanceCategory('${option.value}')">
+                    ${option.label}
+                </button>
+            `).join('');
+
+            document.getElementById('balanceCategoryModal').classList.add('active');
+        }
+
+        function closeBalanceCategoryModal() {
+            document.getElementById('balanceCategoryModal').classList.remove('active');
+            pendingBalanceCategoryChange = null;
+            selectedBalanceCategory = null;
+        }
+
+        function cancelBalanceCategory() {
+            closeBalanceCategoryModal();
+        }
+
+        function selectBalanceCategory(value) {
+            selectedBalanceCategory = value;
+            document.querySelectorAll('#balanceCategoryTiles .category-tile').forEach(tile => {
+                tile.classList.toggle('selected', tile.dataset.value === value);
+            });
+
+            const isOther = value === 'inne';
+            document.getElementById('balanceCategoryOtherGroup').classList.toggle('hidden', !isOther);
+            if (isOther) {
+                document.getElementById('balanceCategoryOtherInput').focus();
+            }
+        }
+
+        function confirmBalanceCategory() {
+            if (!pendingBalanceCategoryChange || !selectedBalanceCategory) {
+                alert('Wybierz kategorię');
+                return;
+            }
+
+            let finalCategory = selectedBalanceCategory;
+            const otherInput = document.getElementById('balanceCategoryOtherInput').value.trim();
+            if (selectedBalanceCategory === 'inne') {
+                if (!otherInput) {
+                    alert('Wpisz nazwę kategorii "inne"');
+                    return;
+                }
+                finalCategory = otherInput;
+            }
+
+            const today = formatDateString(new Date());
+            const { changeType, amount, newBalance } = pendingBalanceCategoryChange;
+
+            appStorage.setItem(STORAGE_KEYS.BALANCE, newBalance.toString());
+            if (changeType === 'expense') {
+                recordExpenseEntry({
+                    amount: amount,
+                    category: finalCategory,
+                    date: today,
+                    source: 'balance-update',
+                    name: ''
+                });
+            } else {
+                recordIncomeEntry({
+                    amount: amount,
+                    category: finalCategory,
+                    date: today,
+                    source: 'balance-update',
+                    name: ''
+                });
+            }
+
+            pendingBalanceCategoryChange = null;
+            selectedBalanceCategory = null;
+            closeBalanceCategoryModal();
+            closeBalanceModal();
+            loadBalance();
+            updateCalculations();
+        }
+
+        function openIncomeModal() {
+            editingIncomeId = null;
+            setIncomeModalMode(false);
+            resetIncomeForm();
+            document.getElementById('incomeModal').classList.add('active');
+        }
+
+        function closeIncomeModal() {
+            document.getElementById('incomeModal').classList.remove('active');
+            editingIncomeId = null;
+            setIncomeModalMode(false);
+            resetIncomeForm();
+        }
+
+        function setIncomeModalMode(isEdit) {
+            document.getElementById('incomeModalTitle').textContent = isEdit ? '💵 Edytuj wpływ' : '💵 Dodaj wpływ';
+            document.getElementById('incomeSubmitBtn').textContent = isEdit ? 'Zapisz' : 'Dodaj';
+        }
+
+        function resetIncomeForm() {
+            document.getElementById('incomeName').value = '';
+            document.getElementById('incomeAmount').value = '';
+            document.getElementById('incomeDate').value = '';
+            selectIncomeFrequency('once');
+        }
+
+        function openPaymentModal() {
+            editingPaymentId = null;
+            setPaymentModalMode(false);
+            resetPaymentForm();
+            document.getElementById('paymentModal').classList.add('active');
+        }
+
+        function closePaymentModal() {
+            document.getElementById('paymentModal').classList.remove('active');
+            editingPaymentId = null;
+            setPaymentModalMode(false);
+            resetPaymentForm();
+        }
+
+        function setPaymentModalMode(isEdit) {
+            document.getElementById('paymentModalTitle').textContent = isEdit ? '➕ Edytuj płatność' : '➕ Dodaj płatność';
+            document.getElementById('paymentSubmitBtn').textContent = isEdit ? 'Zapisz' : 'Dodaj';
+        }
+
+        function resetPaymentForm() {
+            document.getElementById('paymentName').value = '';
+            document.getElementById('paymentAmount').value = '';
+            document.getElementById('paymentDate').value = '';
+            selectedMonths = [];
+            syncMonthButtons();
+            selectPaymentFrequency('once');
+        }
+
+        function openAdminPanel() {
+            document.getElementById('adminModal').classList.add('active');
+            document.getElementById('currentPin').value = '';
+            document.getElementById('newPin').value = '';
+            document.getElementById('confirmPin').value = '';
+            document.getElementById('adminError').style.display = 'none';
+            document.getElementById('adminSuccess').style.display = 'none';
+        }
+
+        function closeAdminPanel() {
+            document.getElementById('adminModal').classList.remove('active');
+        }
+
+        function selectPaymentFrequency(freq) {
+            selectedPaymentFrequency = freq;
+            const options = document.querySelectorAll('#paymentModal .radio-option');
+            options.forEach(opt => opt.classList.remove('selected'));
+            
+            if (freq === 'once') options[0].classList.add('selected');
+            else if (freq === 'monthly') options[1].classList.add('selected');
+            else if (freq === 'selected') options[2].classList.add('selected');
+
+            document.getElementById('monthSelectorGroup').classList.toggle('hidden', freq !== 'selected');
+        }
+
+        function selectIncomeFrequency(freq) {
+            selectedIncomeFrequency = freq;
+            const options = document.querySelectorAll('#incomeModal .radio-option');
+            options.forEach(opt => opt.classList.remove('selected'));
+            
+            if (freq === 'once') options[0].classList.add('selected');
+            else if (freq === 'monthly') options[1].classList.add('selected');
+        }
+
+        function toggleMonth(month) {
+            const idx = selectedMonths.indexOf(month);
+            if (idx > -1) {
+                selectedMonths.splice(idx, 1);
+            } else {
+                selectedMonths.push(month);
+            }
+
+            syncMonthButtons();
+        }
+
+        function syncMonthButtons() {
+            const monthBtns = document.querySelectorAll('.month-btn');
+            monthBtns.forEach((btn, index) => {
+                btn.classList.toggle('selected', selectedMonths.includes(index + 1));
+            });
+        }
+
+        function parseDateString(dateString) {
+            if (!dateString || typeof dateString !== 'string') {
+                return new Date(NaN);
+            }
+
+            let year;
+            let month;
+            let day;
+
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+                [year, month, day] = dateString.split('-').map(Number);
+            } else {
+                const match = dateString.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+                if (!match) {
+                    return new Date(NaN);
+                }
+
+                day = Number(match[1]);
+                month = Number(match[2]);
+                year = Number(match[3]);
+            }
+
+            const parsedDate = new Date(year, month - 1, day);
+            if (
+                parsedDate.getFullYear() !== year ||
+                parsedDate.getMonth() !== month - 1 ||
+                parsedDate.getDate() !== day
+            ) {
+                return new Date(NaN);
+            }
+
+            return parsedDate;
+        }
+
+        function formatDateString(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function roundCurrency(value) {
+            return Math.round((Number(value) || 0) * 100) / 100;
+        }
+
+        function getCategoryIcon(category, entryType) {
+            const normalized = (category || '').toLowerCase();
+            const expenseIcons = {
+                'jedzenie': '🍽️',
+                'paliwo': '⛽',
+                'lekarstwa': '💊',
+                'suplementy': '💪',
+                'ubrania': '👕',
+                'zaplanowane płatności': '📅',
+                'inne': '✨'
+            };
+            const incomeIcons = {
+                'premia': '🎁',
+                'rodzice': '👨‍👩‍👧',
+                'inne': '✨'
+            };
+
+            if (entryType === 'income') {
+                return incomeIcons[normalized] || '💵';
+            }
+            return expenseIcons[normalized] || '🧾';
+        }
+
+        function parseStoredJSON(key, fallbackValue) {
+            const raw = appStorage.getItem(key);
+            if (!raw) {
+                return fallbackValue;
+            }
+
+            try {
+                return JSON.parse(raw);
+            } catch {
+                return fallbackValue;
+            }
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function getMonthInputValue(dateValue) {
+            const source = dateValue instanceof Date ? dateValue : new Date();
+            const year = source.getFullYear();
+            const month = String(source.getMonth() + 1).padStart(2, '0');
+            return `${year}-${month}`;
+        }
+
+        function getMonthFilter(monthValue) {
+            if (!/^\d{4}-\d{2}$/.test(monthValue || '')) {
+                return null;
+            }
+
+            const [yearString, monthString] = monthValue.split('-');
+            return {
+                year: Number(yearString),
+                month: Number(monthString) - 1
+            };
+        }
+
+        function getEntriesByMonth(entries, monthValue) {
+            const filter = getMonthFilter(monthValue);
+            if (!filter) {
+                return [];
+            }
+
+            return entries.filter(entry => {
+                const entryDate = parseDateString(entry.date);
+                if (Number.isNaN(entryDate.getTime())) {
+                    return false;
+                }
+
+                return (
+                    entryDate.getFullYear() === filter.year &&
+                    entryDate.getMonth() === filter.month
+                );
+            });
+        }
+
+        function formatEntryDate(dateString) {
+            const parsedDate = parseDateString(dateString);
+            if (Number.isNaN(parsedDate.getTime())) {
+                return escapeHtml(dateString);
+            }
+            return parsedDate.toLocaleDateString('pl-PL');
+        }
+
+        function buildCategoryTotals(entries) {
+            const totals = {};
+            entries.forEach(entry => {
+                const category = entry.category || 'inne';
+                totals[category] = roundCurrency((totals[category] || 0) + (Number(entry.amount) || 0));
+            });
+            return totals;
+        }
+
+        function ensureTrackingDataConsistency() {
+            const expenseEntries = parseStoredJSON(STORAGE_KEYS.EXPENSE_ENTRIES, []);
+            const incomeEntries = parseStoredJSON(STORAGE_KEYS.INCOME_ENTRIES, []);
+            appStorage.setItem(STORAGE_KEYS.EXPENSE_ENTRIES, JSON.stringify(expenseEntries));
+            appStorage.setItem(STORAGE_KEYS.INCOME_ENTRIES, JSON.stringify(incomeEntries));
+            appStorage.setItem(STORAGE_KEYS.EXPENSE_TOTALS, JSON.stringify(buildCategoryTotals(expenseEntries)));
+            appStorage.setItem(STORAGE_KEYS.INCOME_TOTALS, JSON.stringify(buildCategoryTotals(incomeEntries)));
+        }
+
+        function recordExpenseEntry({ amount, category, date, source, name }) {
+            const entries = parseStoredJSON(STORAGE_KEYS.EXPENSE_ENTRIES, []);
+            const categoryName = (category || '').trim() || 'inne';
+            entries.push({
+                id: Date.now() + Math.floor(Math.random() * 1000),
+                amount: roundCurrency(amount),
+                category: categoryName,
+                date: date || formatDateString(new Date()),
+                source: source || 'balance-update',
+                name: name || '',
+                icon: getCategoryIcon(categoryName, 'expense')
+            });
+            appStorage.setItem(STORAGE_KEYS.EXPENSE_ENTRIES, JSON.stringify(entries));
+            appStorage.setItem(STORAGE_KEYS.EXPENSE_TOTALS, JSON.stringify(buildCategoryTotals(entries)));
+            if (document.getElementById('expenseAnalysisModal').classList.contains('active')) {
+                renderExpenseAnalysis();
+            }
+        }
+
+        function recordIncomeEntry({ amount, category, date, source, name }) {
+            const entries = parseStoredJSON(STORAGE_KEYS.INCOME_ENTRIES, []);
+            const categoryName = (category || '').trim() || 'inne';
+            entries.push({
+                id: Date.now() + Math.floor(Math.random() * 1000),
+                amount: roundCurrency(amount),
+                category: categoryName,
+                date: date || formatDateString(new Date()),
+                source: source || 'balance-update',
+                name: name || '',
+                icon: getCategoryIcon(categoryName, 'income')
+            });
+            appStorage.setItem(STORAGE_KEYS.INCOME_ENTRIES, JSON.stringify(entries));
+            appStorage.setItem(STORAGE_KEYS.INCOME_TOTALS, JSON.stringify(buildCategoryTotals(entries)));
+            if (document.getElementById('incomeAnalysisModal').classList.contains('active')) {
+                renderIncomeAnalysis();
+            }
+        }
+
+        function formatDateToPolish(dateString) {
+            const date = parseDateString(dateString);
+            if (Number.isNaN(date.getTime())) {
+                return '';
+            }
+
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            return `${day}/${month}/${year}`;
+        }
+
+        function parseUserDateToISO(inputValue) {
+            const value = (inputValue || '').trim();
+            if (!value) {
+                return null;
+            }
+
+            const parsedDate = parseDateString(value);
+            if (Number.isNaN(parsedDate.getTime())) {
+                return null;
+            }
+
+            return formatDateString(parsedDate);
+        }
+
+        function formatDateInput(input) {
+            const digits = input.value.replace(/\D/g, '').slice(0, 8);
+            const parts = [];
+
+            if (digits.length > 0) {
+                parts.push(digits.slice(0, 2));
+            }
+            if (digits.length > 2) {
+                parts.push(digits.slice(2, 4));
+            }
+            if (digits.length > 4) {
+                parts.push(digits.slice(4, 8));
+            }
+
+            input.value = parts.join('/');
+        }
+
+        function normalizeDateInput(input) {
+            const isoDate = parseUserDateToISO(input.value);
+            if (!isoDate) {
+                return;
+            }
+
+            input.value = formatDateToPolish(isoDate);
+        }
+
+        function isSameMonthAndYear(dateToCheck, referenceDate) {
+            return (
+                dateToCheck.getMonth() === referenceDate.getMonth() &&
+                dateToCheck.getFullYear() === referenceDate.getFullYear()
+            );
+        }
+
+        function normalizeDate(date) {
+            const result = new Date(date);
+            result.setHours(0, 0, 0, 0);
+            return result;
+        }
+
+        function isSameCalendarDate(firstDate, secondDate) {
+            return formatDateString(firstDate) === formatDateString(secondDate);
+        }
+
+        function getMonthOccurrenceDate(baseDate, year, monthIndex) {
+            const lastDayOfMonth = new Date(year, monthIndex + 1, 0).getDate();
+            const day = Math.min(baseDate.getDate(), lastDayOfMonth);
+            return normalizeDate(new Date(year, monthIndex, day));
+        }
+
+        function isOccurrencePaid(payment, occurrenceDateString) {
+            return Array.isArray(payment.paidDates) && payment.paidDates.includes(occurrenceDateString);
+        }
+
+        function addPaidOccurrence(payment, occurrenceDateString) {
+            if (!Array.isArray(payment.paidDates)) {
+                payment.paidDates = [];
+            }
+
+            if (!payment.paidDates.includes(occurrenceDateString)) {
+                payment.paidDates.push(occurrenceDateString);
+                payment.paidDates.sort();
+            }
+        }
+
+        function getIncomeOccurrenceForMonth(income, monthDate) {
+            const baseDate = parseDateString(income.date);
+            const monthStart = normalizeDate(new Date(monthDate.getFullYear(), monthDate.getMonth(), 1));
+
+            if (income.frequency === 'once') {
+                return isSameMonthAndYear(baseDate, monthStart) ? formatDateString(baseDate) : null;
+            }
+
+            if (income.frequency === 'monthly') {
+                const occurrenceDate = getMonthOccurrenceDate(baseDate, monthStart.getFullYear(), monthStart.getMonth());
+                return occurrenceDate >= baseDate ? formatDateString(occurrenceDate) : null;
+            }
+
+            return null;
+        }
+
+        function getPaymentOccurrenceForMonth(payment, monthDate) {
+            const baseDate = parseDateString(payment.date);
+            const monthStart = normalizeDate(new Date(monthDate.getFullYear(), monthDate.getMonth(), 1));
+
+            if (payment.frequency === 'once') {
+                return isSameMonthAndYear(baseDate, monthStart) ? formatDateString(baseDate) : null;
+            }
+
+            if (payment.frequency === 'monthly') {
+                const occurrenceDate = getMonthOccurrenceDate(baseDate, monthStart.getFullYear(), monthStart.getMonth());
+                return occurrenceDate >= baseDate ? formatDateString(occurrenceDate) : null;
+            }
+
+            if (payment.frequency === 'selected') {
+                const selectedMonth = monthStart.getMonth() + 1;
+                if (!Array.isArray(payment.months) || !payment.months.includes(selectedMonth)) {
+                    return null;
+                }
+
+                const occurrenceDate = getMonthOccurrenceDate(baseDate, monthStart.getFullYear(), monthStart.getMonth());
+                return occurrenceDate >= baseDate ? formatDateString(occurrenceDate) : null;
+            }
+
+            return null;
+        }
+
+        function getNextIncomeOccurrenceFromDate(income, fromDate) {
+            const startDate = normalizeDate(fromDate);
+            const baseDate = parseDateString(income.date);
+
+            if (income.frequency === 'once') {
+                return baseDate >= startDate ? formatDateString(baseDate) : null;
+            }
+
+            if (income.frequency === 'monthly') {
+                for (let i = 0; i < 36; i++) {
+                    const probeMonth = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
+                    const occurrenceDateString = getIncomeOccurrenceForMonth(income, probeMonth);
+                    if (!occurrenceDateString) {
+                        continue;
+                    }
+
+                    const occurrenceDate = parseDateString(occurrenceDateString);
+                    if (occurrenceDate >= startDate) {
+                        return occurrenceDateString;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        function settlePaymentOccurrence(payment, occurrenceDateString) {
+            const amount = parseFloat(payment.amount) || 0;
+            if (isOccurrencePaid(payment, occurrenceDateString)) {
+                return 0;
+            }
+
+            if (payment.frequency === 'once') {
+                payment._delete = true;
+                return amount;
+            }
+
+            addPaidOccurrence(payment, occurrenceDateString);
+            return amount;
+        }
+
+        function updateBalanceBy(deltaAmount) {
+            const currentBalance = parseFloat(appStorage.getItem(STORAGE_KEYS.BALANCE)) || 0;
+            const updatedBalance = Math.round((currentBalance + deltaAmount) * 100) / 100;
+            appStorage.setItem(STORAGE_KEYS.BALANCE, updatedBalance.toString());
+        }
+
+        function isPaymentDueOnDate(payment, targetDate) {
+            const normalizedDate = normalizeDate(targetDate);
+            const targetDateString = formatDateString(normalizedDate);
+
+            if (payment.frequency === 'once') {
+                return formatDateString(parseDateString(payment.date)) === targetDateString;
+            }
+
+            const occurrenceForMonth = getPaymentOccurrenceForMonth(payment, normalizedDate);
+            return occurrenceForMonth === targetDateString;
+        }
+
+        function markPaymentAsPaid(id, occurrenceDateString) {
+            const stored = appStorage.getItem(STORAGE_KEYS.PAYMENTS);
+            let payments = stored ? JSON.parse(stored) : [];
+            const payment = payments.find(item => item.id === id);
+
+            if (!payment) {
+                return;
+            }
+
+            const targetDate = parseDateString(occurrenceDateString);
+            if (!isPaymentDueOnDate(payment, targetDate) || isOccurrencePaid(payment, occurrenceDateString)) {
+                return;
+            }
+
+            const settledAmount = settlePaymentOccurrence(payment, occurrenceDateString);
+            if (settledAmount <= 0) {
+                return;
+            }
+
+            payments = payments.filter(item => !item._delete);
+            appStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
+            recordExpenseEntry({
+                amount: settledAmount,
+                category: 'zaplanowane płatności',
+                date: occurrenceDateString,
+                source: 'planned-payment',
+                name: payment.name || ''
+            });
+            updateBalanceBy(-settledAmount);
+            loadBalance();
+            loadPayments();
+            updateCalculations();
+        }
+
+        function processDuePaymentsAtNoon() {
+            const now = new Date();
+            if (now.getHours() < 12) {
+                return false;
+            }
+
+            const today = normalizeDate(now);
+            const todayString = formatDateString(today);
+            const stored = appStorage.getItem(STORAGE_KEYS.PAYMENTS);
+            let payments = stored ? JSON.parse(stored) : [];
+            if (payments.length === 0) {
+                return false;
+            }
+
+            let totalSettledAmount = 0;
+            payments.forEach(payment => {
+                if (!isPaymentDueOnDate(payment, today) || isOccurrencePaid(payment, todayString)) {
+                    return;
+                }
+
+                const settledAmount = settlePaymentOccurrence(payment, todayString);
+                if (settledAmount > 0) {
+                    totalSettledAmount += settledAmount;
+                    recordExpenseEntry({
+                        amount: settledAmount,
+                        category: 'zaplanowane płatności',
+                        date: todayString,
+                        source: 'planned-payment',
+                        name: payment.name || ''
+                    });
+                }
+            });
+
+            if (totalSettledAmount <= 0) {
+                return false;
+            }
+
+            payments = payments.filter(item => !item._delete);
+            appStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
+            updateBalanceBy(-totalSettledAmount);
+            return true;
+        }
+
+        function updateViewMonthLabel() {
+            const labelElement = document.getElementById('currentViewMonth');
+            const labelButton = document.getElementById('monthLabelBtn');
+            if (!labelElement || !labelButton) {
+                return;
+            }
+
+            const formatted = currentViewDate.toLocaleDateString('pl-PL', { month: 'long', year: 'numeric' });
+            labelElement.textContent = formatted.charAt(0).toUpperCase() + formatted.slice(1);
+
+            const today = new Date();
+            const isCurrentMonth = (
+                currentViewDate.getMonth() === today.getMonth() &&
+                currentViewDate.getFullYear() === today.getFullYear()
+            );
+            labelButton.classList.toggle('current-month', isCurrentMonth);
+        }
+
+        function changeViewMonth(offset) {
+            currentViewDate = new Date(currentViewDate.getFullYear(), currentViewDate.getMonth() + offset, 1);
+            updateViewMonthLabel();
+            loadPayments();
+            loadIncomes();
+        }
+
+        function goToCurrentMonth() {
+            const today = new Date();
+            currentViewDate = new Date(today.getFullYear(), today.getMonth(), 1);
+            updateViewMonthLabel();
+            loadPayments();
+            loadIncomes();
+        }
+
+        function openExpenseAnalysisModal() {
+            const monthInput = document.getElementById('expenseAnalysisMonth');
+            monthInput.value = getMonthInputValue(currentViewDate);
+            expenseDetailsVisible = false;
+            document.getElementById('expenseDetailsSection').classList.add('hidden');
+            document.getElementById('expenseDetailsBtn').textContent = 'Szczegóły';
+            renderExpenseAnalysis();
+            document.getElementById('expenseAnalysisModal').classList.add('active');
+        }
+
+        function closeExpenseAnalysisModal() {
+            document.getElementById('expenseAnalysisModal').classList.remove('active');
+        }
+
+        function openIncomeAnalysisModal() {
+            const monthInput = document.getElementById('incomeAnalysisMonth');
+            monthInput.value = getMonthInputValue(currentViewDate);
+            renderIncomeAnalysis();
+            document.getElementById('incomeAnalysisModal').classList.add('active');
+        }
+
+        function closeIncomeAnalysisModal() {
+            document.getElementById('incomeAnalysisModal').classList.remove('active');
+        }
+
+        function openIncomeAnalysisFromExpense() {
+            const expenseMonth = document.getElementById('expenseAnalysisMonth').value;
+            closeExpenseAnalysisModal();
+            const monthInput = document.getElementById('incomeAnalysisMonth');
+            monthInput.value = expenseMonth || getMonthInputValue(currentViewDate);
+            renderIncomeAnalysis();
+            document.getElementById('incomeAnalysisModal').classList.add('active');
+        }
+
+        function toggleExpenseDetails() {
+            const monthInput = document.getElementById('expenseAnalysisMonth').value;
+            const entries = getEntriesByMonth(parseStoredJSON(STORAGE_KEYS.EXPENSE_ENTRIES, []), monthInput);
+            if (entries.length === 0) {
+                return;
+            }
+
+            expenseDetailsVisible = !expenseDetailsVisible;
+            document.getElementById('expenseDetailsSection').classList.toggle('hidden', !expenseDetailsVisible);
+            document.getElementById('expenseDetailsBtn').textContent = expenseDetailsVisible ? 'Ukryj szczegóły' : 'Szczegóły';
+            if (expenseDetailsVisible) {
+                renderExpenseAnalysis();
+            }
+        }
+
+        function renderExpenseAnalysis() {
+            const monthValue = document.getElementById('expenseAnalysisMonth').value;
+            const entries = getEntriesByMonth(parseStoredJSON(STORAGE_KEYS.EXPENSE_ENTRIES, []), monthValue);
+            const summaryElement = document.getElementById('expenseAnalysisSummary');
+            const detailsElement = document.getElementById('expenseAnalysisDetails');
+            const detailsButton = document.getElementById('expenseDetailsBtn');
+            const detailsSection = document.getElementById('expenseDetailsSection');
+
+            if (entries.length === 0) {
+                summaryElement.innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">🧾</div>
+                        <p>Brak wydatków w wybranym miesiącu</p>
+                    </div>
+                `;
+                detailsElement.innerHTML = '';
+                detailsButton.disabled = true;
+                detailsSection.classList.add('hidden');
+                detailsButton.textContent = 'Szczegóły';
+                expenseDetailsVisible = false;
+                return;
+            }
+
+            detailsButton.disabled = false;
+
+            const grouped = {};
+            entries.forEach(entry => {
+                const category = entry.category || 'inne';
+                if (!grouped[category]) {
+                    grouped[category] = {
+                        total: 0,
+                        entries: []
+                    };
+                }
+
+                grouped[category].total = roundCurrency(grouped[category].total + (Number(entry.amount) || 0));
+                grouped[category].entries.push(entry);
+            });
+
+            const categories = Object.entries(grouped)
+                .sort((a, b) => b[1].total - a[1].total);
+
+            summaryElement.innerHTML = categories.map(([category, group]) => {
+                const icon = getCategoryIcon(category, 'expense');
+                return `
+                    <div class="analysis-category-card">
+                        <div class="analysis-category-header">
+                            <span>${icon} ${escapeHtml(category)}</span>
+                            <span class="analysis-category-total">-${group.total.toFixed(2)} zł</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            if (!expenseDetailsVisible) {
+                detailsSection.classList.add('hidden');
+                return;
+            }
+
+            detailsSection.classList.remove('hidden');
+            detailsButton.textContent = 'Ukryj szczegóły';
+            detailsElement.innerHTML = categories.map(([category, group]) => {
+                const icon = getCategoryIcon(category, 'expense');
+                const categoryEntries = [...group.entries].sort((a, b) => parseDateString(a.date) - parseDateString(b.date));
+                return `
+                    <div class="analysis-category-card">
+                        <div class="analysis-category-header">
+                            <span>${icon} ${escapeHtml(category)}</span>
+                            <span class="analysis-category-total">-${group.total.toFixed(2)} zł</span>
+                        </div>
+                        <div class="analysis-entry-list">
+                            ${categoryEntries.map(entry => `
+                                <div class="analysis-entry">
+                                    <div>
+                                        <div>${escapeHtml(entry.name || category)}</div>
+                                        <div class="analysis-entry-meta">${formatEntryDate(entry.date)}</div>
+                                    </div>
+                                    <div class="analysis-entry-amount-expense">-${roundCurrency(entry.amount).toFixed(2)} zł</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderIncomeAnalysis() {
+            const monthValue = document.getElementById('incomeAnalysisMonth').value;
+            const entries = getEntriesByMonth(parseStoredJSON(STORAGE_KEYS.INCOME_ENTRIES, []), monthValue);
+            const listElement = document.getElementById('incomeAnalysisList');
+
+            if (entries.length === 0) {
+                listElement.innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">💵</div>
+                        <p>Brak wpływów w wybranym miesiącu</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const grouped = {};
+            entries.forEach(entry => {
+                const category = entry.category || 'inne';
+                if (!grouped[category]) {
+                    grouped[category] = {
+                        total: 0,
+                        entries: []
+                    };
+                }
+
+                grouped[category].total = roundCurrency(grouped[category].total + (Number(entry.amount) || 0));
+                grouped[category].entries.push(entry);
+            });
+
+            const categories = Object.entries(grouped)
+                .sort((a, b) => b[1].total - a[1].total);
+
+            listElement.innerHTML = categories.map(([category, group]) => {
+                const icon = getCategoryIcon(category, 'income');
+                const categoryEntries = [...group.entries].sort((a, b) => parseDateString(a.date) - parseDateString(b.date));
+                return `
+                    <div class="analysis-category-card">
+                        <div class="analysis-category-header">
+                            <span>${icon} ${escapeHtml(category)}</span>
+                            <span class="analysis-category-total analysis-income-total">+${group.total.toFixed(2)} zł</span>
+                        </div>
+                        <div class="analysis-entry-list">
+                            ${categoryEntries.map(entry => `
+                                <div class="analysis-entry">
+                                    <div>
+                                        <div>${escapeHtml(entry.name || category)}</div>
+                                        <div class="analysis-entry-meta">${formatEntryDate(entry.date)}</div>
+                                    </div>
+                                    <div class="analysis-entry-amount-income">+${roundCurrency(entry.amount).toFixed(2)} zł</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function startNoonWatcher() {
+            if (noonWatcherStarted) {
+                return;
+            }
+
+            noonWatcherStarted = true;
+            setInterval(() => {
+                if (document.getElementById('mainApp').classList.contains('hidden')) {
+                    return;
+                }
+
+                if (processDuePaymentsAtNoon()) {
+                    loadData();
+                }
+            }, 60000);
+        }
+
+        function openEditIncome(id) {
+            const stored = appStorage.getItem(STORAGE_KEYS.INCOMES);
+            const incomes = stored ? JSON.parse(stored) : [];
+            const income = incomes.find(item => item.id === id);
+
+            if (!income) {
+                return;
+            }
+
+            editingIncomeId = id;
+            setIncomeModalMode(true);
+            document.getElementById('incomeName').value = income.name;
+            document.getElementById('incomeAmount').value = income.amount;
+            document.getElementById('incomeDate').value = formatDateToPolish(income.date);
+            selectIncomeFrequency(income.frequency || 'once');
+            document.getElementById('incomeModal').classList.add('active');
+        }
+
+        function openEditPayment(id) {
+            const stored = appStorage.getItem(STORAGE_KEYS.PAYMENTS);
+            const payments = stored ? JSON.parse(stored) : [];
+            const payment = payments.find(item => item.id === id);
+
+            if (!payment) {
+                return;
+            }
+
+            editingPaymentId = id;
+            setPaymentModalMode(true);
+            document.getElementById('paymentName').value = payment.name;
+            document.getElementById('paymentAmount').value = payment.amount;
+            document.getElementById('paymentDate').value = formatDateToPolish(payment.date);
+            selectPaymentFrequency(payment.frequency || 'once');
+            selectedMonths = payment.frequency === 'selected' && Array.isArray(payment.months) ? [...payment.months] : [];
+            syncMonthButtons();
+            document.getElementById('paymentModal').classList.add('active');
+        }
+
+        function updateBalance() {
+            const rawValue = document.getElementById('balanceInput').value.trim();
+            if (!rawValue) {
+                alert('Podaj stan konta');
+                return;
+            }
+
+            const newBalance = parseFloat(rawValue);
+            if (Number.isNaN(newBalance)) {
+                alert('Podaj poprawną kwotę');
+                return;
+            }
+
+            const currentBalance = parseFloat(appStorage.getItem(STORAGE_KEYS.BALANCE)) || 0;
+            const difference = roundCurrency(newBalance - currentBalance);
+
+            if (difference === 0) {
+                closeBalanceModal();
+                return;
+            }
+
+            if (difference < 0) {
+                openBalanceCategoryModal('expense', Math.abs(difference), newBalance);
+                return;
+            }
+
+            openBalanceCategoryModal('income', difference, newBalance);
+        }
+
+        function loadBalance() {
+            const balance = parseFloat(appStorage.getItem(STORAGE_KEYS.BALANCE)) || 0;
+            document.getElementById('currentBalance').textContent = balance.toFixed(2) + ' zł';
+        }
+
+        function saveIncome() {
+            const name = document.getElementById('incomeName').value.trim();
+            const amount = parseFloat(document.getElementById('incomeAmount').value);
+            const rawDate = document.getElementById('incomeDate').value;
+            const date = parseUserDateToISO(rawDate);
+
+            if (!name || Number.isNaN(amount) || !rawDate) {
+                alert('Wypełnij wszystkie pola');
+                return;
+            }
+
+            if (!date) {
+                alert('Podaj poprawną datę w formacie dd/mm/yyyy');
+                return;
+            }
+
+            let incomes = [];
+            const stored = appStorage.getItem(STORAGE_KEYS.INCOMES);
+            if (stored) {
+                incomes = JSON.parse(stored);
+            }
+
+            if (editingIncomeId !== null) {
+                incomes = incomes.map(income => {
+                    if (income.id !== editingIncomeId) {
+                        return income;
+                    }
+
+                    return {
+                        ...income,
+                        name: name,
+                        amount: amount,
+                        date: date,
+                        frequency: selectedIncomeFrequency,
+                        type: 'income'
+                    };
+                });
+            } else {
+                incomes.push({
+                    id: Date.now(),
+                    name: name,
+                    amount: amount,
+                    date: date,
+                    frequency: selectedIncomeFrequency,
+                    type: 'income'
+                });
+            }
+
+            appStorage.setItem(STORAGE_KEYS.INCOMES, JSON.stringify(incomes));
+
+            closeIncomeModal();
+            loadIncomes();
+            updateCalculations();
+        }
+
+        function savePayment() {
+            const name = document.getElementById('paymentName').value.trim();
+            const amount = parseFloat(document.getElementById('paymentAmount').value);
+            const rawDate = document.getElementById('paymentDate').value;
+            const date = parseUserDateToISO(rawDate);
+
+            if (!name || Number.isNaN(amount) || !rawDate) {
+                alert('Wypełnij wszystkie pola');
+                return;
+            }
+
+            if (!date) {
+                alert('Podaj poprawną datę w formacie dd/mm/yyyy');
+                return;
+            }
+
+            if (selectedPaymentFrequency === 'selected' && selectedMonths.length === 0) {
+                alert('Wybierz co najmniej jeden miesiąc');
+                return;
+            }
+
+            const months = selectedPaymentFrequency === 'selected'
+                ? [...selectedMonths].sort((a, b) => a - b)
+                : [];
+
+            let payments = [];
+            const stored = appStorage.getItem(STORAGE_KEYS.PAYMENTS);
+            if (stored) {
+                payments = JSON.parse(stored);
+            }
+
+            if (editingPaymentId !== null) {
+                payments = payments.map(payment => {
+                    if (payment.id !== editingPaymentId) {
+                        return payment;
+                    }
+
+                    return {
+                        ...payment,
+                        name: name,
+                        amount: amount,
+                        date: date,
+                        frequency: selectedPaymentFrequency,
+                        months: months,
+                        type: 'expense'
+                    };
+                });
+            } else {
+                payments.push({
+                    id: Date.now(),
+                    name: name,
+                    amount: amount,
+                    date: date,
+                    frequency: selectedPaymentFrequency,
+                    months: months,
+                    type: 'expense'
+                });
+            }
+
+            appStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
+
+            closePaymentModal();
+            loadPayments();
+            updateCalculations();
+        }
+
+        function addIncome() {
+            saveIncome();
+        }
+
+        function addPayment() {
+            savePayment();
+        }
+
+        function loadIncomes() {
+            const stored = appStorage.getItem(STORAGE_KEYS.INCOMES);
+            const incomes = stored ? JSON.parse(stored) : [];
+            const today = normalizeDate(new Date());
+            const viewMonth = normalizeDate(new Date(currentViewDate.getFullYear(), currentViewDate.getMonth(), 1));
+            const visibleIncomes = [];
+            let nextIncome = null;
+
+            incomes.forEach(income => {
+                const occurrenceForView = getIncomeOccurrenceForMonth(income, viewMonth);
+                if (occurrenceForView) {
+                    visibleIncomes.push({
+                        ...income,
+                        date: occurrenceForView,
+                        isRecurring: income.frequency !== 'once'
+                    });
+                }
+
+                const nextOccurrence = getNextIncomeOccurrenceFromDate(income, today);
+                if (!nextOccurrence) {
+                    return;
+                }
+
+                const nextOccurrenceDate = parseDateString(nextOccurrence);
+                if (!nextIncome || nextOccurrenceDate < parseDateString(nextIncome.date)) {
+                    nextIncome = {
+                        ...income,
+                        date: nextOccurrence
+                    };
+                }
+            });
+
+            visibleIncomes.sort((a, b) => parseDateString(a.date) - parseDateString(b.date));
+
+            const listElement = document.getElementById('incomeList');
+            
+            if (visibleIncomes.length === 0) {
+                listElement.innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">💰</div>
+                        <p>Brak zaplanowanych wpływów w tym miesiącu</p>
+                    </div>
+                `;
+            } else {
+                listElement.innerHTML = visibleIncomes.map(income => `
+                    <div class="payment-item editable" onclick="openEditIncome(${income.id})" title="Kliknij, aby edytować serię">
+                        <div class="payment-info">
+                            <div class="payment-name">${income.name}</div>
+                            <div class="payment-meta">
+                                <div class="payment-date">${parseDateString(income.date).toLocaleDateString('pl-PL')}</div>
+                                ${income.frequency === 'monthly' ? 
+                                    '<span class="payment-frequency freq-monthly">Co miesiąc</span>' : 
+                                    '<span class="payment-frequency freq-income">Jednorazowy</span>'}
+                            </div>
+                        </div>
+                        <div class="payment-amount income">+${income.amount.toFixed(2)} zł</div>
+                        ${!income.isRecurring ? `<button class="delete-btn" onclick="event.stopPropagation(); deleteIncome(${income.id})">Usuń</button>` : ''}
+                    </div>
+                `).join('');
+            }
+
+            // Update next income countdown
+            if (nextIncome) {
+                const nextDate = parseDateString(nextIncome.date);
+                
+                const diffTime = nextDate - today;
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                document.getElementById('daysToIncome').textContent = diffDays >= 0 ? diffDays + ' dni' : '0 dni';
+                document.getElementById('nextIncomeDate').textContent = 'Wpływ: ' + nextDate.toLocaleDateString('pl-PL');
+            } else {
+                document.getElementById('daysToIncome').textContent = '-- dni';
+                document.getElementById('nextIncomeDate').textContent = 'Brak zaplanowanych wpływów';
+            }
+        }
+
+        function loadPayments() {
+            const stored = appStorage.getItem(STORAGE_KEYS.PAYMENTS);
+            const payments = stored ? JSON.parse(stored) : [];
+            const today = normalizeDate(new Date());
+            const viewMonth = normalizeDate(new Date(currentViewDate.getFullYear(), currentViewDate.getMonth(), 1));
+            const visiblePayments = [];
+
+            payments.forEach(payment => {
+                const occurrenceForView = getPaymentOccurrenceForMonth(payment, viewMonth);
+                if (!occurrenceForView || isOccurrencePaid(payment, occurrenceForView)) {
+                    return;
+                }
+
+                visiblePayments.push({
+                    ...payment,
+                    date: occurrenceForView,
+                    isRecurring: payment.frequency !== 'once'
+                });
+            });
+
+            visiblePayments.sort((a, b) => parseDateString(a.date) - parseDateString(b.date));
+
+            const listElement = document.getElementById('paymentsList');
+            
+            if (visiblePayments.length === 0) {
+                listElement.innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">📭</div>
+                        <p>Brak zaplanowanych płatności w tym miesiącu</p>
+                    </div>
+                `;
+                return;
+            }
+
+            listElement.innerHTML = visiblePayments.map(payment => `
+                <div class="payment-item editable" onclick="openEditPayment(${payment.id})" title="Kliknij, aby edytować serię">
+                    <div class="payment-info">
+                        <div class="payment-name">${payment.name}</div>
+                        <div class="payment-meta">
+                            <div class="payment-date">${parseDateString(payment.date).toLocaleDateString('pl-PL')}</div>
+                            ${payment.frequency === 'monthly' ? 
+                                '<span class="payment-frequency freq-monthly">Co miesiąc</span>' : 
+                                payment.frequency === 'selected' ?
+                                '<span class="payment-frequency freq-selected">Wybrane miesiące</span>' :
+                                ''}
+                        </div>
+                    </div>
+                    <div class="payment-amount expense">-${payment.amount.toFixed(2)} zł</div>
+                    ${parseDateString(payment.date) <= today ? `<button class="paid-btn" onclick="event.stopPropagation(); markPaymentAsPaid(${payment.id}, '${payment.date}')">Opłacone</button>` : ''}
+                    ${!payment.isRecurring ? `<button class="delete-btn" onclick="event.stopPropagation(); deletePayment(${payment.id})">Usuń</button>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function deletePayment(id) {
+            const stored = appStorage.getItem(STORAGE_KEYS.PAYMENTS);
+            let payments = stored ? JSON.parse(stored) : [];
+            payments = payments.filter(p => p.id !== id);
+            appStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
+            loadPayments();
+            updateCalculations();
+        }
+
+        function deleteIncome(id) {
+            const stored = appStorage.getItem(STORAGE_KEYS.INCOMES);
+            let incomes = stored ? JSON.parse(stored) : [];
+            incomes = incomes.filter(i => i.id !== id);
+            appStorage.setItem(STORAGE_KEYS.INCOMES, JSON.stringify(incomes));
+            loadIncomes();
+            updateCalculations();
+        }
+
+        function updateCalculations() {
+            const balance = parseFloat(appStorage.getItem(STORAGE_KEYS.BALANCE)) || 0;
+
+            let totalPayments = 0;
+            const paymentsStored = appStorage.getItem(STORAGE_KEYS.PAYMENTS);
+            if (paymentsStored) {
+                const payments = JSON.parse(paymentsStored);
+                const today = normalizeDate(new Date());
+
+                payments.forEach(payment => {
+                    const occurrenceInCurrentMonth = getPaymentOccurrenceForMonth(payment, today);
+                    if (!occurrenceInCurrentMonth || isOccurrencePaid(payment, occurrenceInCurrentMonth)) {
+                        return;
+                    }
+
+                    totalPayments += payment.amount;
+                });
+            }
+
+            const afterPayments = balance - totalPayments;
+            const afterPaymentsElement = document.getElementById('afterPayments');
+            afterPaymentsElement.textContent = afterPayments.toFixed(2) + ' zł';
+            
+            if (afterPayments > 0) {
+                afterPaymentsElement.classList.add('positive');
+                afterPaymentsElement.classList.remove('negative');
+            } else if (afterPayments < 0) {
+                afterPaymentsElement.classList.add('negative');
+                afterPaymentsElement.classList.remove('positive');
+            }
+        }
+
+        function changePin() {
+            const currentPin = document.getElementById('currentPin').value;
+            const newPin = document.getElementById('newPin').value;
+            const confirmPin = document.getElementById('confirmPin').value;
+
+            const errorElement = document.getElementById('adminError');
+            const successElement = document.getElementById('adminSuccess');
+
+            errorElement.style.display = 'none';
+            successElement.style.display = 'none';
+
+            if (!currentPin || !newPin || !confirmPin) {
+                errorElement.textContent = 'Wypełnij wszystkie pola';
+                errorElement.style.display = 'block';
+                return;
+            }
+
+            if (newPin.length !== 4 || !/^\d+$/.test(newPin)) {
+                errorElement.textContent = 'PIN musi składać się z 4 cyfr';
+                errorElement.style.display = 'block';
+                return;
+            }
+
+            if (newPin !== confirmPin) {
+                errorElement.textContent = 'Nowe PINy nie pasują do siebie';
+                errorElement.style.display = 'block';
+                return;
+            }
+
+            const storedPin = appStorage.getItem(STORAGE_KEYS.PIN);
+            
+            if (currentPin !== storedPin) {
+                errorElement.textContent = 'Nieprawidłowy aktualny PIN';
+                errorElement.style.display = 'block';
+                return;
+            }
+
+            appStorage.setItem(STORAGE_KEYS.PIN, newPin);
+            successElement.style.display = 'block';
+
+            setTimeout(() => {
+                closeAdminPanel();
+            }, 2000);
+        }
+
+        document.getElementById('pin4').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                login();
+            }
+        });
+
+        initializeStorage().finally(() => {
+            document.getElementById('pin1').focus();
+        });
+    </script>
+</body>
+</html>
+
