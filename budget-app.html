@@ -1301,8 +1301,11 @@
         let saveTimerId = null;
         let saveInProgress = false;
         let savePending = false;
+        let expenseAnalysisRequestId = 0;
+        let incomeAnalysisRequestId = 0;
         let appState = {
             pin: '1234',
+            version: 1,
             balance: 0,
             payments: [],
             incomes: [],
@@ -1313,6 +1316,7 @@
         };
 
         function sanitizeState(rawState) {
+            const version = Number(rawState && rawState.version);
             const balance = Number(rawState && rawState.balance);
             const sanitizeTotals = (rawTotals) => {
                 if (!rawTotals || typeof rawTotals !== 'object' || Array.isArray(rawTotals)) {
@@ -1353,6 +1357,7 @@
 
             return {
                 pin: typeof rawState?.pin === 'string' && rawState.pin.length > 0 ? rawState.pin : '1234',
+                version: Number.isFinite(version) && version > 0 ? Math.trunc(version) : 1,
                 balance: Number.isFinite(balance) ? balance : 0,
                 payments: Array.isArray(rawState?.payments) ? rawState.payments : [],
                 incomes: Array.isArray(rawState?.incomes) ? rawState.incomes : [],
@@ -1366,6 +1371,7 @@
         function isStateEffectivelyEmpty(state) {
             return (
                 state.pin === '1234' &&
+                Number(state.version) === 1 &&
                 Number(state.balance) === 0 &&
                 Array.isArray(state.payments) &&
                 state.payments.length === 0 &&
@@ -1451,6 +1457,7 @@
         async function saveStateToServer() {
             const payload = JSON.parse(JSON.stringify(appState));
             delete payload.pin;
+            payload.version = Number(appState.version) || 1;
             const response = await fetch('/api/state', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -1469,6 +1476,12 @@
                 error.status = response.status;
                 error.details = details;
                 throw error;
+            }
+
+            const result = await response.json().catch(() => ({}));
+            const updatedVersion = Number(result?.state?.version);
+            if (Number.isFinite(updatedVersion) && updatedVersion > 0) {
+                appState.version = Math.trunc(updatedVersion);
             }
         }
 
@@ -1531,6 +1544,27 @@
             } catch (error) {
                 if (error?.status === 401) {
                     handleUnauthorizedSession('Sesja wygasła. Zaloguj się ponownie.');
+                    savePending = false;
+                    return;
+                }
+                if (error?.status === 409 && error?.details?.error === 'state_conflict') {
+                    alert('Dane zostały zmienione w innej sesji. Odświeżono aktualny stan z serwera.');
+                    try {
+                        await fetchStateFromServer();
+                        loadData();
+                        if (document.getElementById('expenseAnalysisModal').classList.contains('active')) {
+                            renderExpenseAnalysis();
+                        }
+                        if (document.getElementById('incomeAnalysisModal').classList.contains('active')) {
+                            renderIncomeAnalysis();
+                        }
+                    } catch (refreshError) {
+                        if (refreshError?.status === 401) {
+                            handleUnauthorizedSession('Sesja wygasła. Zaloguj się ponownie.');
+                        } else {
+                            console.error('Nie udało się odświeżyć stanu po konflikcie:', refreshError);
+                        }
+                    }
                     savePending = false;
                     return;
                 }
@@ -2739,10 +2773,44 @@
             document.getElementById('incomeAnalysisModal').classList.add('active');
         }
 
+        async function fetchTransactionsForAnalysis(entryType, monthValue) {
+            if (!/^\d{4}-\d{2}$/.test(String(monthValue || ''))) {
+                return {
+                    entries: [],
+                    totalsByCategory: {},
+                    totalAmount: 0
+                };
+            }
+
+            const response = await fetch(
+                `/api/transactions?type=${encodeURIComponent(entryType)}&month=${encodeURIComponent(monthValue)}`,
+                {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' },
+                    cache: 'no-store',
+                    credentials: 'same-origin'
+                }
+            );
+
+            if (!response.ok) {
+                let details = {};
+                try {
+                    details = await response.json();
+                } catch {
+                    details = {};
+                }
+                const error = new Error(`GET /api/transactions failed: ${response.status}`);
+                error.status = response.status;
+                error.details = details;
+                throw error;
+            }
+
+            return response.json();
+        }
+
         function toggleExpenseDetails() {
-            const monthInput = document.getElementById('expenseAnalysisMonth').value;
-            const entries = getEntriesByMonth(parseStoredJSON(STORAGE_KEYS.EXPENSE_ENTRIES, []), monthInput);
-            if (entries.length === 0) {
+            const detailsButton = document.getElementById('expenseDetailsBtn');
+            if (detailsButton.disabled) {
                 return;
             }
 
@@ -2750,13 +2818,71 @@
             renderExpenseAnalysis();
         }
 
-        function renderExpenseAnalysis() {
+        async function renderExpenseAnalysis() {
+            const requestId = ++expenseAnalysisRequestId;
             const monthValue = document.getElementById('expenseAnalysisMonth').value;
-            const entries = getEntriesByMonth(parseStoredJSON(STORAGE_KEYS.EXPENSE_ENTRIES, []), monthValue);
             const summaryElement = document.getElementById('expenseAnalysisSummary');
             const detailsElement = document.getElementById('expenseAnalysisDetails');
             const detailsButton = document.getElementById('expenseDetailsBtn');
             const detailsSection = document.getElementById('expenseDetailsSection');
+            let payload;
+
+            try {
+                payload = await fetchTransactionsForAnalysis('expense', monthValue);
+            } catch (error) {
+                if (requestId !== expenseAnalysisRequestId) {
+                    return;
+                }
+                if (error?.status === 401) {
+                    handleUnauthorizedSession('Sesja wygasła. Zaloguj się ponownie.');
+                    return;
+                }
+                summaryElement.classList.remove('hidden');
+                summaryElement.innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">⚠️</div>
+                        <p>Nie udało się pobrać analizy wydatków.</p>
+                    </div>
+                `;
+                detailsElement.innerHTML = summaryElement.innerHTML;
+                detailsButton.disabled = true;
+                detailsSection.classList.add('hidden');
+                detailsButton.textContent = 'Szczegóły';
+                expenseDetailsVisible = false;
+                return;
+            }
+
+            if (requestId !== expenseAnalysisRequestId) {
+                return;
+            }
+
+            const entries = Array.isArray(payload?.entries) ? payload.entries : [];
+            const grouped = {};
+            entries.forEach(entry => {
+                const category = entry.category || 'inne';
+                if (!grouped[category]) {
+                    grouped[category] = [];
+                }
+                grouped[category].push(entry);
+            });
+
+            const apiTotals = payload?.totalsByCategory && typeof payload.totalsByCategory === 'object'
+                ? payload.totalsByCategory
+                : {};
+            const totalsByCategory = Object.keys(apiTotals).length > 0
+                ? Object.entries(apiTotals).reduce((acc, [category, value]) => {
+                    const amount = Number(value);
+                    if (Number.isFinite(amount)) {
+                        acc[category] = roundCurrency(amount);
+                    }
+                    return acc;
+                }, {})
+                : Object.entries(grouped).reduce((acc, [category, categoryEntries]) => {
+                    acc[category] = roundCurrency(
+                        categoryEntries.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0)
+                    );
+                    return acc;
+                }, {});
 
             if (entries.length === 0) {
                 summaryElement.classList.remove('hidden');
@@ -2781,30 +2907,14 @@
 
             detailsButton.disabled = false;
 
-            const grouped = {};
-            entries.forEach(entry => {
-                const category = entry.category || 'inne';
-                if (!grouped[category]) {
-                    grouped[category] = {
-                        total: 0,
-                        entries: []
-                    };
-                }
-
-                grouped[category].total = roundCurrency(grouped[category].total + (Number(entry.amount) || 0));
-                grouped[category].entries.push(entry);
-            });
-
-            const categories = Object.entries(grouped)
-                .sort((a, b) => b[1].total - a[1].total);
-
-            summaryElement.innerHTML = categories.map(([category, group]) => {
+            const categories = Object.entries(totalsByCategory).sort((a, b) => b[1] - a[1]);
+            summaryElement.innerHTML = categories.map(([category, total]) => {
                 const icon = getCategoryIcon(category, 'expense');
                 return `
                     <div class="analysis-category-card">
                         <div class="analysis-category-header">
                             <span>${icon} ${escapeHtml(category)}</span>
-                            <span class="analysis-category-total">-${group.total.toFixed(2)} zł</span>
+                            <span class="analysis-category-total">-${roundCurrency(total).toFixed(2)} zł</span>
                         </div>
                     </div>
                 `;
@@ -2820,10 +2930,12 @@
             summaryElement.classList.add('hidden');
             detailsSection.classList.remove('hidden');
             detailsButton.textContent = 'Ukryj szczegóły';
-            const totalExpenses = roundCurrency(entries.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0));
-            detailsElement.innerHTML = categories.map(([category, group]) => {
+            const totalExpenses = Number.isFinite(Number(payload?.totalAmount))
+                ? roundCurrency(Number(payload.totalAmount))
+                : roundCurrency(entries.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0));
+            detailsElement.innerHTML = categories.map(([category]) => {
                 const icon = getCategoryIcon(category, 'expense');
-                const categoryEntries = [...group.entries]
+                const categoryEntries = [...(grouped[category] || [])]
                     .filter(entry => !Number.isNaN(parseDateString(entry.date).getTime()))
                     .sort((a, b) => parseDateString(b.date) - parseDateString(a.date));
 
@@ -2856,10 +2968,36 @@
             `;
         }
 
-        function renderIncomeAnalysis() {
+        async function renderIncomeAnalysis() {
+            const requestId = ++incomeAnalysisRequestId;
             const monthValue = document.getElementById('incomeAnalysisMonth').value;
-            const entries = getEntriesByMonth(parseStoredJSON(STORAGE_KEYS.INCOME_ENTRIES, []), monthValue);
             const listElement = document.getElementById('incomeAnalysisList');
+            let payload;
+
+            try {
+                payload = await fetchTransactionsForAnalysis('income', monthValue);
+            } catch (error) {
+                if (requestId !== incomeAnalysisRequestId) {
+                    return;
+                }
+                if (error?.status === 401) {
+                    handleUnauthorizedSession('Sesja wygasła. Zaloguj się ponownie.');
+                    return;
+                }
+                listElement.innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">⚠️</div>
+                        <p>Nie udało się pobrać analizy wpływów.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            if (requestId !== incomeAnalysisRequestId) {
+                return;
+            }
+
+            const entries = Array.isArray(payload?.entries) ? payload.entries : [];
 
             if (entries.length === 0) {
                 listElement.innerHTML = `
@@ -2885,18 +3023,35 @@
                 grouped[category].entries.push(entry);
             });
 
-            const categories = Object.entries(grouped)
-                .sort((a, b) => b[1].total - a[1].total);
-            const totalIncome = roundCurrency(entries.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0));
+            const apiTotals = payload?.totalsByCategory && typeof payload.totalsByCategory === 'object'
+                ? payload.totalsByCategory
+                : {};
+            const totalsByCategory = Object.keys(apiTotals).length > 0
+                ? Object.entries(apiTotals).reduce((acc, [category, value]) => {
+                    const amount = Number(value);
+                    if (Number.isFinite(amount)) {
+                        acc[category] = roundCurrency(amount);
+                    }
+                    return acc;
+                }, {})
+                : Object.entries(grouped).reduce((acc, [category, group]) => {
+                    acc[category] = roundCurrency(group.total);
+                    return acc;
+                }, {});
 
-            listElement.innerHTML = categories.map(([category, group]) => {
+            const categories = Object.entries(totalsByCategory).sort((a, b) => b[1] - a[1]);
+            const totalIncome = Number.isFinite(Number(payload?.totalAmount))
+                ? roundCurrency(Number(payload.totalAmount))
+                : roundCurrency(entries.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0));
+
+            listElement.innerHTML = categories.map(([category, total]) => {
                 const icon = getCategoryIcon(category, 'income');
-                const categoryEntries = [...group.entries].sort((a, b) => parseDateString(a.date) - parseDateString(b.date));
+                const categoryEntries = [...(grouped[category]?.entries || [])].sort((a, b) => parseDateString(a.date) - parseDateString(b.date));
                 return `
                     <div class="analysis-category-card">
                         <div class="analysis-category-header">
                             <span>${icon} ${escapeHtml(category)}</span>
-                            <span class="analysis-category-total analysis-income-total">+${group.total.toFixed(2)} zł</span>
+                            <span class="analysis-category-total analysis-income-total">+${roundCurrency(total).toFixed(2)} zł</span>
                         </div>
                         <div class="analysis-entry-list">
                             ${categoryEntries.map(entry => `

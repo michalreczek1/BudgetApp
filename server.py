@@ -7,15 +7,17 @@ import os
 import secrets
 import sqlite3
 import threading
+import time
 from datetime import date, datetime, timedelta, timezone
 from http.cookies import SimpleCookie
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 
 DEFAULT_STATE = {
     "pin": "1234",
+    "version": 1,
     "balance": 0.0,
     "payments": [],
     "incomes": [],
@@ -38,6 +40,14 @@ PIN_SCRYPT_PARAMS = {
     "p": 1,
     "dklen": 64,
 }
+BACKUP_INTERVAL_SECONDS = 24 * 60 * 60
+BACKUP_RETENTION_COUNT = 14
+
+
+class StateConflictError(Exception):
+    def __init__(self, current_version):
+        super().__init__("State version conflict")
+        self.current_version = int(current_version or 1)
 
 
 def sanitize_entries(raw_entries, default_category):
@@ -183,6 +193,13 @@ def sanitize_state(raw_state):
         pin = DEFAULT_STATE["pin"]
 
     try:
+        version = int(raw_state.get("version", DEFAULT_STATE["version"]))
+    except (TypeError, ValueError):
+        version = DEFAULT_STATE["version"]
+    if version < 1:
+        version = 1
+
+    try:
         balance = float(raw_state.get("balance", DEFAULT_STATE["balance"]))
     except (TypeError, ValueError):
         balance = DEFAULT_STATE["balance"]
@@ -201,6 +218,7 @@ def sanitize_state(raw_state):
 
     return {
         "pin": pin,
+        "version": version,
         "balance": balance,
         "payments": payments,
         "incomes": incomes,
@@ -475,6 +493,219 @@ def delete_session_token(raw_token):
             conn.close()
 
 
+def sync_transactions_from_state(clean_state, conn):
+    now_iso = isoformat_utc(utcnow())
+    expected_keys = {"expense": set(), "income": set()}
+
+    def push_entries(entry_type, entries):
+        for idx, entry in enumerate(entries):
+            try:
+                entry_id = int(entry.get("id", 0))
+            except (TypeError, ValueError):
+                entry_id = 0
+            if entry_id <= 0:
+                entry_id = 900000000000 + idx + 1
+
+            entry_key = f"{entry_type}:{entry_id}"
+            expected_keys[entry_type].add(entry_key)
+            conn.execute(
+                """
+                INSERT INTO transactions (
+                    entry_key, entry_type, amount, category, entry_date,
+                    source, name, icon, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(entry_key) DO UPDATE SET
+                    amount = excluded.amount,
+                    category = excluded.category,
+                    entry_date = excluded.entry_date,
+                    source = excluded.source,
+                    name = excluded.name,
+                    icon = excluded.icon,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    entry_key,
+                    entry_type,
+                    round(float(entry.get("amount", 0) or 0), 2),
+                    str(entry.get("category") or "inne"),
+                    str(entry.get("date") or date.today().isoformat()),
+                    str(entry.get("source") or "balance-update"),
+                    str(entry.get("name") or ""),
+                    str(entry.get("icon") or ""),
+                    now_iso,
+                    now_iso,
+                ),
+            )
+
+    push_entries("expense", clean_state.get("expenseEntries", []))
+    push_entries("income", clean_state.get("incomeEntries", []))
+
+    for entry_type, keys in expected_keys.items():
+        if keys:
+            sorted_keys = sorted(keys)
+            placeholders = ",".join("?" for _ in sorted_keys)
+            conn.execute(
+                f"""
+                DELETE FROM transactions
+                WHERE entry_type = ?
+                  AND entry_key NOT IN ({placeholders})
+                """,
+                (entry_type, *sorted_keys),
+            )
+        else:
+            conn.execute("DELETE FROM transactions WHERE entry_type = ?", (entry_type,))
+
+
+def parse_month_range(month_value):
+    if not isinstance(month_value, str):
+        raise ValueError("Invalid month format")
+    raw = month_value.strip()
+    if len(raw) != 7 or raw[4] != "-":
+        raise ValueError("Invalid month format")
+    try:
+        year = int(raw[:4])
+        month = int(raw[5:7])
+    except ValueError as exc:
+        raise ValueError("Invalid month format") from exc
+    if month < 1 or month > 12:
+        raise ValueError("Invalid month format")
+
+    start = date(year, month, 1)
+    if month == 12:
+        end = date(year + 1, 1, 1)
+    else:
+        end = date(year, month + 1, 1)
+    return start.isoformat(), end.isoformat()
+
+
+def read_transactions_for_month(entry_type, month_value):
+    if entry_type not in {"expense", "income"}:
+        raise ValueError("Invalid transaction type")
+    start_date, end_date = parse_month_range(month_value)
+
+    with DB_LOCK:
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            rows = conn.execute(
+                """
+                SELECT entry_key, amount, category, entry_date, source, name, icon
+                FROM transactions
+                WHERE entry_type = ?
+                  AND entry_date >= ?
+                  AND entry_date < ?
+                ORDER BY entry_date DESC, id DESC
+                """,
+                (entry_type, start_date, end_date),
+            ).fetchall()
+        finally:
+            conn.close()
+
+    entries = []
+    totals_by_category = {}
+    total_amount = 0.0
+
+    for row in rows:
+        amount = round(float(row[1] or 0), 2)
+        category = str(row[2] or "inne")
+        entry_key = str(row[0] or "")
+        entry_id = 0
+        try:
+            _, raw_id = entry_key.split(":", 1)
+            entry_id = int(raw_id)
+        except (ValueError, TypeError):
+            entry_id = 0
+
+        entry = {
+            "id": entry_id,
+            "amount": amount,
+            "category": category,
+            "date": str(row[3] or ""),
+            "source": str(row[4] or ""),
+            "name": str(row[5] or ""),
+            "icon": str(row[6] or ""),
+        }
+        entries.append(entry)
+        totals_by_category[category] = round(totals_by_category.get(category, 0.0) + amount, 2)
+        total_amount = round(total_amount + amount, 2)
+
+    return {
+        "type": entry_type,
+        "month": month_value,
+        "entries": entries,
+        "totalsByCategory": totals_by_category,
+        "totalAmount": round(total_amount, 2),
+    }
+
+
+def get_backup_dir():
+    raw_backup_dir = str(os.getenv("BACKUP_DIR", "")).strip()
+    if raw_backup_dir:
+        return Path(raw_backup_dir)
+
+    if DB_PATH.parent and str(DB_PATH.parent) not in ("", "."):
+        return DB_PATH.parent / "backups"
+    return Path("backups")
+
+
+def trim_old_backups(backup_dir):
+    backups = sorted(
+        backup_dir.glob("budget_*.db"),
+        key=lambda file_path: file_path.stat().st_mtime,
+        reverse=True,
+    )
+    for stale_backup in backups[BACKUP_RETENTION_COUNT:]:
+        try:
+            stale_backup.unlink()
+        except OSError:
+            pass
+
+
+def create_db_backup():
+    backup_dir = get_backup_dir()
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = utcnow().strftime("%Y%m%d_%H%M%S")
+    backup_file = backup_dir / f"budget_{timestamp}.db"
+    temp_file = backup_dir / f".{backup_file.name}.tmp"
+
+    try:
+        with DB_LOCK:
+            source_conn = sqlite3.connect(DB_PATH)
+            try:
+                target_conn = sqlite3.connect(temp_file)
+                try:
+                    source_conn.backup(target_conn)
+                finally:
+                    target_conn.close()
+            finally:
+                source_conn.close()
+
+        os.replace(temp_file, backup_file)
+        trim_old_backups(backup_dir)
+        return backup_file
+    except Exception as exc:
+        print(f"[backup] failed: {exc}")
+        try:
+            if temp_file.exists():
+                temp_file.unlink()
+        except OSError:
+            pass
+        return None
+
+
+def start_backup_scheduler():
+    def worker():
+        while True:
+            time.sleep(BACKUP_INTERVAL_SECONDS)
+            backup_path = create_db_backup()
+            if backup_path:
+                print(f"[backup] created: {backup_path}")
+
+    thread = threading.Thread(target=worker, daemon=True, name="db-backup-worker")
+    thread.start()
+
+
 def init_db():
     with DB_LOCK:
         conn = sqlite3.connect(DB_PATH)
@@ -491,6 +722,7 @@ def init_db():
                     income_entries TEXT NOT NULL DEFAULT '[]',
                     expense_totals TEXT NOT NULL DEFAULT '{}',
                     income_totals TEXT NOT NULL DEFAULT '{}',
+                    version INTEGER NOT NULL DEFAULT 1,
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """
@@ -516,11 +748,16 @@ def init_db():
                 conn.execute(
                     "ALTER TABLE app_state ADD COLUMN income_totals TEXT NOT NULL DEFAULT '{}'"
                 )
+            if "version" not in existing_columns:
+                conn.execute(
+                    "ALTER TABLE app_state ADD COLUMN version INTEGER NOT NULL DEFAULT 1"
+                )
 
             conn.execute("UPDATE app_state SET expense_entries = '[]' WHERE expense_entries IS NULL")
             conn.execute("UPDATE app_state SET income_entries = '[]' WHERE income_entries IS NULL")
             conn.execute("UPDATE app_state SET expense_totals = '{}' WHERE expense_totals IS NULL")
             conn.execute("UPDATE app_state SET income_totals = '{}' WHERE income_totals IS NULL")
+            conn.execute("UPDATE app_state SET version = 1 WHERE version IS NULL OR version < 1")
 
             row = conn.execute("SELECT id FROM app_state WHERE id = 1").fetchone()
             if row is None:
@@ -528,9 +765,9 @@ def init_db():
                     """
                     INSERT INTO app_state (
                         id, pin, balance, payments, incomes,
-                        expense_entries, income_entries, expense_totals, income_totals
+                        expense_entries, income_entries, expense_totals, income_totals, version
                     )
-                    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, 1)
                     """,
                     (
                         DEFAULT_STATE["pin"],
@@ -578,6 +815,35 @@ def init_db():
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS transactions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    entry_key TEXT NOT NULL UNIQUE,
+                    entry_type TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    category TEXT NOT NULL,
+                    entry_date TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    name TEXT NOT NULL DEFAULT '',
+                    icon TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_transactions_type_date
+                ON transactions (entry_type, entry_date)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_transactions_type_category_date
+                ON transactions (entry_type, category, entry_date)
+                """
+            )
 
             auth_state_row = conn.execute("SELECT id FROM auth_state WHERE id = 1").fetchone()
             if auth_state_row is None:
@@ -608,6 +874,38 @@ def init_db():
                     ),
                 )
 
+            state_row = conn.execute(
+                """
+                SELECT
+                    pin,
+                    version,
+                    balance,
+                    payments,
+                    incomes,
+                    expense_entries,
+                    income_entries,
+                    expense_totals,
+                    income_totals
+                FROM app_state
+                WHERE id = 1
+                """
+            ).fetchone()
+            if state_row:
+                clean_state = sanitize_state(
+                    {
+                        "pin": state_row[0],
+                        "version": state_row[1],
+                        "balance": state_row[2],
+                        "payments": parse_json_column(state_row[3], []),
+                        "incomes": parse_json_column(state_row[4], []),
+                        "expenseEntries": parse_json_column(state_row[5], []),
+                        "incomeEntries": parse_json_column(state_row[6], []),
+                        "expenseCategoryTotals": parse_json_column(state_row[7], {}),
+                        "incomeCategoryTotals": parse_json_column(state_row[8], {}),
+                    }
+                )
+                sync_transactions_from_state(clean_state, conn)
+
             conn.commit()
         finally:
             conn.close()
@@ -621,6 +919,7 @@ def read_state():
                 """
                 SELECT
                     pin,
+                    version,
                     balance,
                     payments,
                     incomes,
@@ -638,17 +937,18 @@ def read_state():
     if row is None:
         return dict(DEFAULT_STATE)
 
-    payments = parse_json_column(row[2], [])
-    incomes = parse_json_column(row[3], [])
-    expense_entries = parse_json_column(row[4], [])
-    income_entries = parse_json_column(row[5], [])
-    expense_totals = parse_json_column(row[6], {})
-    income_totals = parse_json_column(row[7], {})
+    payments = parse_json_column(row[3], [])
+    incomes = parse_json_column(row[4], [])
+    expense_entries = parse_json_column(row[5], [])
+    income_entries = parse_json_column(row[6], [])
+    expense_totals = parse_json_column(row[7], {})
+    income_totals = parse_json_column(row[8], {})
 
     return sanitize_state(
         {
             "pin": row[0],
-            "balance": row[1],
+            "version": row[1],
+            "balance": row[2],
             "payments": payments,
             "incomes": incomes,
             "expenseEntries": expense_entries,
@@ -659,7 +959,7 @@ def read_state():
     )
 
 
-def write_state(state):
+def write_state(state, expected_version=None):
     raw_state = state if isinstance(state, dict) else {}
     if "pin" not in raw_state:
         existing_state = read_state()
@@ -669,40 +969,51 @@ def write_state(state):
     with DB_LOCK:
         conn = sqlite3.connect(DB_PATH)
         try:
-            cursor = conn.execute(
-                """
-                UPDATE app_state
-                SET
-                    pin = ?,
-                    balance = ?,
-                    payments = ?,
-                    incomes = ?,
-                    expense_entries = ?,
-                    income_entries = ?,
-                    expense_totals = ?,
-                    income_totals = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = 1
-                """,
-                (
-                    clean_state["pin"],
-                    clean_state["balance"],
-                    json.dumps(clean_state["payments"], ensure_ascii=False),
-                    json.dumps(clean_state["incomes"], ensure_ascii=False),
-                    json.dumps(clean_state["expenseEntries"], ensure_ascii=False),
-                    json.dumps(clean_state["incomeEntries"], ensure_ascii=False),
-                    json.dumps(clean_state["expenseCategoryTotals"], ensure_ascii=False),
-                    json.dumps(clean_state["incomeCategoryTotals"], ensure_ascii=False),
-                ),
-            )
-            if cursor.rowcount == 0:
-                conn.execute(
+            if expected_version is not None:
+                cursor = conn.execute(
                     """
-                    INSERT INTO app_state (
-                        id, pin, balance, payments, incomes,
-                        expense_entries, income_entries, expense_totals, income_totals
-                    )
-                    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+                    UPDATE app_state
+                    SET
+                        pin = ?,
+                        balance = ?,
+                        payments = ?,
+                        incomes = ?,
+                        expense_entries = ?,
+                        income_entries = ?,
+                        expense_totals = ?,
+                        income_totals = ?,
+                        version = version + 1,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = 1 AND version = ?
+                    """,
+                    (
+                        clean_state["pin"],
+                        clean_state["balance"],
+                        json.dumps(clean_state["payments"], ensure_ascii=False),
+                        json.dumps(clean_state["incomes"], ensure_ascii=False),
+                        json.dumps(clean_state["expenseEntries"], ensure_ascii=False),
+                        json.dumps(clean_state["incomeEntries"], ensure_ascii=False),
+                        json.dumps(clean_state["expenseCategoryTotals"], ensure_ascii=False),
+                        json.dumps(clean_state["incomeCategoryTotals"], ensure_ascii=False),
+                        int(expected_version),
+                    ),
+                )
+            else:
+                cursor = conn.execute(
+                    """
+                    UPDATE app_state
+                    SET
+                        pin = ?,
+                        balance = ?,
+                        payments = ?,
+                        incomes = ?,
+                        expense_entries = ?,
+                        income_entries = ?,
+                        expense_totals = ?,
+                        income_totals = ?,
+                        version = version + 1,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = 1
                     """,
                     (
                         clean_state["pin"],
@@ -715,6 +1026,35 @@ def write_state(state):
                         json.dumps(clean_state["incomeCategoryTotals"], ensure_ascii=False),
                     ),
                 )
+
+            if cursor.rowcount == 0:
+                if expected_version is not None:
+                    current_row = conn.execute("SELECT version FROM app_state WHERE id = 1").fetchone()
+                    current_version = int(current_row[0]) if current_row else 1
+                    raise StateConflictError(current_version)
+                conn.execute(
+                    """
+                    INSERT INTO app_state (
+                        id, pin, balance, payments, incomes,
+                        expense_entries, income_entries, expense_totals, income_totals, version
+                    )
+                    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    """,
+                    (
+                        clean_state["pin"],
+                        clean_state["balance"],
+                        json.dumps(clean_state["payments"], ensure_ascii=False),
+                        json.dumps(clean_state["incomes"], ensure_ascii=False),
+                        json.dumps(clean_state["expenseEntries"], ensure_ascii=False),
+                        json.dumps(clean_state["incomeEntries"], ensure_ascii=False),
+                        json.dumps(clean_state["expenseCategoryTotals"], ensure_ascii=False),
+                        json.dumps(clean_state["incomeCategoryTotals"], ensure_ascii=False),
+                    ),
+                )
+
+            version_row = conn.execute("SELECT version FROM app_state WHERE id = 1").fetchone()
+            clean_state["version"] = int(version_row[0]) if version_row else 1
+            sync_transactions_from_state(clean_state, conn)
             conn.commit()
         finally:
             conn.close()
@@ -806,9 +1146,45 @@ class BudgetRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(400, {"error": "Invalid JSON body"})
             return
 
-        saved = write_state(payload)
+        if "version" not in payload:
+            self._send_json(400, {"error": "missing_version"})
+            return
+        try:
+            expected_version = int(payload.get("version"))
+        except (TypeError, ValueError):
+            self._send_json(400, {"error": "invalid_version"})
+            return
+        if expected_version < 1:
+            self._send_json(400, {"error": "invalid_version"})
+            return
+
+        payload_without_version = {k: v for k, v in payload.items() if k != "version"}
+        try:
+            saved = write_state(payload_without_version, expected_version=expected_version)
+        except StateConflictError as exc:
+            self._send_json(
+                409,
+                {"error": "state_conflict", "current_version": exc.current_version},
+            )
+            return
         saved.pop("pin", None)
         self._send_json(200, {"ok": True, "state": saved})
+
+    def _handle_transactions_get(self, parsed):
+        if not self._is_authenticated():
+            self._send_json(401, {"error": "unauthorized"})
+            return
+
+        query = parse_qs(parsed.query or "")
+        entry_type = str(query.get("type", [""])[0]).strip().lower()
+        month = str(query.get("month", [""])[0]).strip()
+        try:
+            payload = read_transactions_for_month(entry_type, month)
+        except ValueError as exc:
+            self._send_json(400, {"error": "invalid_query", "message": str(exc)})
+            return
+
+        self._send_json(200, payload)
 
     def _handle_auth_status(self):
         self._send_json(200, {"authenticated": self._is_authenticated()})
@@ -905,6 +1281,9 @@ class BudgetRequestHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/state":
             self._handle_state_get()
             return
+        if parsed.path == "/api/transactions":
+            self._handle_transactions_get(parsed)
+            return
         if parsed.path == "/api/auth/status":
             self._handle_auth_status()
             return
@@ -956,6 +1335,10 @@ def main():
     if DB_PATH.parent and str(DB_PATH.parent) not in ("", "."):
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     init_db()
+    startup_backup = create_db_backup()
+    if startup_backup:
+        print(f"[backup] startup backup created: {startup_backup}")
+    start_backup_scheduler()
 
     server = ThreadingHTTPServer((args.host, args.port), BudgetRequestHandler)
     print(f"Server started: http://{args.host}:{args.port}")

@@ -20,6 +20,7 @@ In Railway -> Variables:
 
 - `DB_PATH=/data/budget.db`
 - `HOST=0.0.0.0`
+- `BACKUP_DIR=/data/backups` (optional, recommended)
 
 `PORT` is injected by Railway automatically.
 
@@ -32,13 +33,27 @@ Railway will use:
 ## 6. Verify
 After deploy open:
 - `/` -> app UI
-- `/api/state` -> JSON state
+- logowanie PIN działa
+- analizy wydatków i wpływów ładują się poprawnie
 
 ## One-time cleanup (keep PIN, remove test data)
 Run once after deploy (or locally) to clear balance/history/plans and keep current PIN:
 
 ```powershell
 python reset_state_keep_pin.py --db /data/budget.db
+```
+
+## Backups (automatic)
+- Przy starcie serwera tworzony jest backup SQLite.
+- Potem backup tworzony jest co 24h.
+- Retencja: 14 najnowszych plików.
+- Domyślna lokalizacja: `<katalog DB>/backups` lub ścieżka z `BACKUP_DIR`.
+
+### Manual restore example
+Zatrzymaj usługę, podmień plik DB i uruchom ponownie:
+
+```powershell
+cp /data/backups/budget_YYYYMMDD_HHMMSS.db /data/budget.db
 ```
 
 ## Local simulation of Railway env
