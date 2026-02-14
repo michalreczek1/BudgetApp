@@ -1636,6 +1636,7 @@
 
         function loadData() {
             processDuePaymentsAtNoon();
+            processDueIncomesAtNoon();
             updateViewMonthLabel();
             loadBalance();
             loadPayments();
@@ -1922,6 +1923,7 @@
             const incomeIcons = {
                 'premia': '🎁',
                 'rodzice': '👨‍👩‍👧',
+                'zaplanowane wpływy': '📅',
                 'inne': '✨'
             };
 
@@ -2145,6 +2147,21 @@
             }
         }
 
+        function isIncomeOccurrenceReceived(income, occurrenceDateString) {
+            return Array.isArray(income.receivedDates) && income.receivedDates.includes(occurrenceDateString);
+        }
+
+        function addReceivedOccurrence(income, occurrenceDateString) {
+            if (!Array.isArray(income.receivedDates)) {
+                income.receivedDates = [];
+            }
+
+            if (!income.receivedDates.includes(occurrenceDateString)) {
+                income.receivedDates.push(occurrenceDateString);
+                income.receivedDates.sort();
+            }
+        }
+
         function getIncomeOccurrenceForMonth(income, monthDate) {
             const baseDate = parseDateString(income.date);
             const monthStart = normalizeDate(new Date(monthDate.getFullYear(), monthDate.getMonth(), 1));
@@ -2192,7 +2209,11 @@
             const baseDate = parseDateString(income.date);
 
             if (income.frequency === 'once') {
-                return baseDate >= startDate ? formatDateString(baseDate) : null;
+                const onceDate = formatDateString(baseDate);
+                if (isIncomeOccurrenceReceived(income, onceDate)) {
+                    return null;
+                }
+                return baseDate >= startDate ? onceDate : null;
             }
 
             if (income.frequency === 'monthly') {
@@ -2200,6 +2221,10 @@
                     const probeMonth = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
                     const occurrenceDateString = getIncomeOccurrenceForMonth(income, probeMonth);
                     if (!occurrenceDateString) {
+                        continue;
+                    }
+
+                    if (isIncomeOccurrenceReceived(income, occurrenceDateString)) {
                         continue;
                     }
 
@@ -2228,6 +2253,21 @@
             return amount;
         }
 
+        function settleIncomeOccurrence(income, occurrenceDateString) {
+            const amount = parseFloat(income.amount) || 0;
+            if (isIncomeOccurrenceReceived(income, occurrenceDateString)) {
+                return 0;
+            }
+
+            if (income.frequency === 'once') {
+                income._delete = true;
+                return amount;
+            }
+
+            addReceivedOccurrence(income, occurrenceDateString);
+            return amount;
+        }
+
         function updateBalanceBy(deltaAmount) {
             const currentBalance = parseFloat(appStorage.getItem(STORAGE_KEYS.BALANCE)) || 0;
             const updatedBalance = Math.round((currentBalance + deltaAmount) * 100) / 100;
@@ -2243,6 +2283,18 @@
             }
 
             const occurrenceForMonth = getPaymentOccurrenceForMonth(payment, normalizedDate);
+            return occurrenceForMonth === targetDateString;
+        }
+
+        function isIncomeDueOnDate(income, targetDate) {
+            const normalizedDate = normalizeDate(targetDate);
+            const targetDateString = formatDateString(normalizedDate);
+
+            if (income.frequency === 'once') {
+                return formatDateString(parseDateString(income.date)) === targetDateString;
+            }
+
+            const occurrenceForMonth = getIncomeOccurrenceForMonth(income, normalizedDate);
             return occurrenceForMonth === targetDateString;
         }
 
@@ -2320,6 +2372,49 @@
             payments = payments.filter(item => !item._delete);
             appStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
             updateBalanceBy(-totalSettledAmount);
+            return true;
+        }
+
+        function processDueIncomesAtNoon() {
+            const now = new Date();
+            if (now.getHours() < 12) {
+                return false;
+            }
+
+            const today = normalizeDate(now);
+            const todayString = formatDateString(today);
+            const stored = appStorage.getItem(STORAGE_KEYS.INCOMES);
+            let incomes = stored ? JSON.parse(stored) : [];
+            if (incomes.length === 0) {
+                return false;
+            }
+
+            let totalSettledIncome = 0;
+            incomes.forEach(income => {
+                if (!isIncomeDueOnDate(income, today) || isIncomeOccurrenceReceived(income, todayString)) {
+                    return;
+                }
+
+                const settledAmount = settleIncomeOccurrence(income, todayString);
+                if (settledAmount > 0) {
+                    totalSettledIncome += settledAmount;
+                    recordIncomeEntry({
+                        amount: settledAmount,
+                        category: 'zaplanowane wpływy',
+                        date: todayString,
+                        source: 'planned-income',
+                        name: income.name || ''
+                    });
+                }
+            });
+
+            if (totalSettledIncome <= 0) {
+                return false;
+            }
+
+            incomes = incomes.filter(item => !item._delete);
+            appStorage.setItem(STORAGE_KEYS.INCOMES, JSON.stringify(incomes));
+            updateBalanceBy(totalSettledIncome);
             return true;
         }
 
@@ -2538,6 +2633,7 @@
 
             const categories = Object.entries(grouped)
                 .sort((a, b) => b[1].total - a[1].total);
+            const totalIncome = roundCurrency(entries.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0));
 
             listElement.innerHTML = categories.map(([category, group]) => {
                 const icon = getCategoryIcon(category, 'income');
@@ -2561,7 +2657,14 @@
                         </div>
                     </div>
                 `;
-            }).join('');
+            }).join('') + `
+                <div class="analysis-category-card">
+                    <div class="analysis-category-header">
+                        <span>🧮 Suma wpływów</span>
+                        <span class="analysis-category-total analysis-income-total">+${totalIncome.toFixed(2)} zł</span>
+                    </div>
+                </div>
+            `;
         }
 
         function startNoonWatcher() {
@@ -2575,7 +2678,9 @@
                     return;
                 }
 
-                if (processDuePaymentsAtNoon()) {
+                const paymentsUpdated = processDuePaymentsAtNoon();
+                const incomesUpdated = processDueIncomesAtNoon();
+                if (paymentsUpdated || incomesUpdated) {
                     loadData();
                 }
             }, 60000);
@@ -2792,7 +2897,7 @@
 
             incomes.forEach(income => {
                 const occurrenceForView = getIncomeOccurrenceForMonth(income, viewMonth);
-                if (occurrenceForView) {
+                if (occurrenceForView && !isIncomeOccurrenceReceived(income, occurrenceForView)) {
                     visibleIncomes.push({
                         ...income,
                         date: occurrenceForView,
