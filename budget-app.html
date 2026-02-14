@@ -3,7 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f1419">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Budżet Domowy">
     <title>Budżet Domowy</title>
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+    <link rel="apple-touch-icon" href="/icon-192.png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * {
@@ -842,6 +850,30 @@
             margin-right: 12px;
         }
 
+        .install-app-btn {
+            position: fixed;
+            left: 50%;
+            bottom: 16px;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, var(--accent-blue), #3b82f6);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 999px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+            padding: 12px 18px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            z-index: 1200;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+
+        .install-app-btn.visible {
+            display: inline-flex;
+        }
+
         .hidden {
             display: none !important;
         }
@@ -884,6 +916,16 @@
 
             .radio-group {
                 flex-direction: column;
+            }
+
+            body {
+                padding-bottom: 84px;
+            }
+        }
+
+        @media (min-width: 769px) {
+            .install-app-btn.visible {
+                display: none !important;
             }
         }
 
@@ -1260,6 +1302,10 @@
         </div>
     </div>
 
+    <button class="install-app-btn" id="installAppBtn" onclick="installApp()" type="button">
+        📲 Dodaj do ekranu głównego
+    </button>
+
     <script>
         const STORAGE_KEYS = {
             PIN: 'budget_pin',
@@ -1303,6 +1349,7 @@
         let savePending = false;
         let expenseAnalysisRequestId = 0;
         let incomeAnalysisRequestId = 0;
+        let deferredInstallPrompt = null;
         let appState = {
             pin: '1234',
             version: 1,
@@ -1502,6 +1549,68 @@
             return response.json();
         }
 
+        function isAndroidMobile() {
+            return /Android/i.test(navigator.userAgent || '');
+        }
+
+        function isStandaloneMode() {
+            return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+        }
+
+        function updateInstallButtonVisibility() {
+            const installButton = document.getElementById('installAppBtn');
+            const mainAppVisible = !document.getElementById('mainApp').classList.contains('hidden');
+            const shouldShow = Boolean(
+                installButton &&
+                mainAppVisible &&
+                isAndroidMobile() &&
+                !isStandaloneMode() &&
+                deferredInstallPrompt
+            );
+            installButton.classList.toggle('visible', shouldShow);
+        }
+
+        function setupPwaInstallPrompt() {
+            window.addEventListener('beforeinstallprompt', event => {
+                event.preventDefault();
+                deferredInstallPrompt = event;
+                updateInstallButtonVisibility();
+            });
+
+            window.addEventListener('appinstalled', () => {
+                deferredInstallPrompt = null;
+                updateInstallButtonVisibility();
+            });
+        }
+
+        async function installApp() {
+            if (!deferredInstallPrompt) {
+                alert('Aby dodać aplikację, użyj menu Chrome i wybierz "Dodaj do ekranu głównego".');
+                return;
+            }
+
+            deferredInstallPrompt.prompt();
+            try {
+                await deferredInstallPrompt.userChoice;
+            } catch (error) {
+                console.error('Prompt instalacji został anulowany:', error);
+            }
+            deferredInstallPrompt = null;
+            updateInstallButtonVisibility();
+        }
+
+        function registerServiceWorker() {
+            if (!('serviceWorker' in navigator)) {
+                return;
+            }
+
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js').catch(error => {
+                    console.error('Nie udało się zarejestrować service worker:', error);
+                });
+            });
+        }
+
         function showLoginScreen() {
             document.getElementById('mainApp').classList.add('hidden');
             document.getElementById('loginScreen').classList.remove('hidden');
@@ -1509,12 +1618,14 @@
                 input.value = '';
             });
             document.getElementById('pin1').focus();
+            updateInstallButtonVisibility();
         }
 
         function showMainAppScreen() {
             document.getElementById('loginScreen').classList.add('hidden');
             document.getElementById('mainApp').classList.remove('hidden');
             document.getElementById('loginError').style.display = 'none';
+            updateInstallButtonVisibility();
         }
 
         function handleUnauthorizedSession(message) {
@@ -3596,6 +3707,8 @@
             }
         });
 
+        setupPwaInstallPrompt();
+        registerServiceWorker();
         initializeStorage();
     </script>
 </body>

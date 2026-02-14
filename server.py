@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import hmac
 import json
+import mimetypes
 import os
 import secrets
 import sqlite3
@@ -13,6 +14,8 @@ from http.cookies import SimpleCookie
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 
 DEFAULT_STATE = {
