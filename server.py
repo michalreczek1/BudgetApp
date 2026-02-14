@@ -1149,19 +1149,36 @@ class BudgetRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(400, {"error": "Invalid JSON body"})
             return
 
-        if "version" not in payload:
-            self._send_json(400, {"error": "missing_version"})
-            return
-        try:
-            expected_version = int(payload.get("version"))
-        except (TypeError, ValueError):
-            self._send_json(400, {"error": "invalid_version"})
-            return
-        if expected_version < 1:
-            self._send_json(400, {"error": "invalid_version"})
-            return
+        # Backward compatibility for stale clients:
+        # if version is missing, allow save in legacy mode (no conflict check).
+        expected_version = None
+        if "version" in payload:
+            try:
+                expected_version = int(payload.get("version"))
+            except (TypeError, ValueError):
+                current_state = read_state()
+                self._send_json(
+                    400,
+                    {
+                        "error": "invalid_version",
+                        "current_version": int(current_state.get("version", 1)),
+                    },
+                )
+                return
+            if expected_version < 1:
+                current_state = read_state()
+                self._send_json(
+                    400,
+                    {
+                        "error": "invalid_version",
+                        "current_version": int(current_state.get("version", 1)),
+                    },
+                )
+                return
 
-        payload_without_version = {k: v for k, v in payload.items() if k != "version"}
+        payload_without_version = {
+            key: value for key, value in payload.items() if key != "version"
+        }
         try:
             saved = write_state(payload_without_version, expected_version=expected_version)
         except StateConflictError as exc:

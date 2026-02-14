@@ -1658,6 +1658,27 @@
                     savePending = false;
                     return;
                 }
+                if (error?.status === 400 && error?.details?.error === 'invalid_version') {
+                    try {
+                        await fetchStateFromServer();
+                        loadData();
+                        if (document.getElementById('expenseAnalysisModal').classList.contains('active')) {
+                            renderExpenseAnalysis();
+                        }
+                        if (document.getElementById('incomeAnalysisModal').classList.contains('active')) {
+                            renderIncomeAnalysis();
+                        }
+                        alert('Wykryto niezgodność wersji danych. Stan został odświeżony z serwera.');
+                    } catch (refreshError) {
+                        if (refreshError?.status === 401) {
+                            handleUnauthorizedSession('Sesja wygasła. Zaloguj się ponownie.');
+                        } else {
+                            console.error('Nie udało się odświeżyć stanu po błędzie wersji:', refreshError);
+                        }
+                    }
+                    savePending = false;
+                    return;
+                }
                 if (error?.status === 409 && error?.details?.error === 'state_conflict') {
                     alert('Dane zostały zmienione w innej sesji. Odświeżono aktualny stan z serwera.');
                     try {
