@@ -257,6 +257,10 @@
             overflow: hidden;
         }
 
+        .stat-card.clickable {
+            cursor: pointer;
+        }
+
         .stat-card::before {
             content: '';
             position: absolute;
@@ -998,7 +1002,7 @@
 
         <!-- Statistics Cards -->
         <div class="stats-grid">
-            <div class="stat-card">
+            <div class="stat-card clickable" onclick="openBalanceModal()" role="button" tabindex="0" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openBalanceModal(); }" title="Kliknij, aby zaktualizować stan konta">
                 <div class="stat-label">Aktualny stan konta</div>
                 <div class="stat-value" id="currentBalance">0.00 zł</div>
                 <div class="stat-subtext">Ostatnia aktualizacja</div>
