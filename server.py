@@ -3,17 +3,21 @@ import argparse
 import hashlib
 import hmac
 import json
+import math
 import mimetypes
 import os
+import re
 import secrets
 import sqlite3
 import threading
 import time
+import uuid
 from datetime import date, datetime, timedelta, timezone
 from http.cookies import SimpleCookie
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from zoneinfo import ZoneInfo
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
@@ -36,8 +40,14 @@ def env_int(name, default, minimum):
     return max(minimum, parsed)
 
 
+MAX_TEXT_LENGTH = 120
+MAX_ICON_LENGTH = 16
+DEPRECATED_PIN_VALUE = "__deprecated__"
+APP_TIMEZONE_NAME = str(os.getenv("APP_TIMEZONE", "Europe/Warsaw")).strip() or "Europe/Warsaw"
+VALID_PAYMENT_FREQUENCIES = {"once", "monthly", "selected"}
+VALID_INCOME_FREQUENCIES = {"once", "monthly"}
 DEFAULT_STATE = {
-    "pin": "1234",
+    "pin": DEPRECATED_PIN_VALUE,
     "version": 1,
     "balance": 0.0,
     "payments": [],
@@ -63,6 +73,34 @@ PIN_SCRYPT_PARAMS = {
 }
 BACKUP_INTERVAL_SECONDS = env_int("BACKUP_INTERVAL_SECONDS", 24 * 60 * 60, 300)
 BACKUP_RETENTION_COUNT = env_int("BACKUP_RETENTION_COUNT", 14, 1)
+STATIC_FILE_WHITELIST = {
+    "/": "budget-app.html",
+    "/budget-app.html": "budget-app.html",
+    "/service-worker.js": "service-worker.js",
+    "/manifest.webmanifest": "manifest.webmanifest",
+    "/icon-192.png": "icon-192.png",
+    "/icon-512.png": "icon-512.png",
+}
+STATE_REQUIRED_KEYS = {
+    "version",
+    "balance",
+    "payments",
+    "incomes",
+    "expenseEntries",
+    "incomeEntries",
+    "expenseCategoryTotals",
+    "incomeCategoryTotals",
+}
+SETTLEMENT_STATUS = {
+    "lastRunAt": None,
+    "timezone": APP_TIMEZONE_NAME,
+    "changed": False,
+    "summary": {
+        "settledPayments": 0,
+        "settledIncomes": 0,
+        "balanceDelta": 0.0,
+    },
+}
 
 
 class StateConflictError(Exception):
@@ -80,17 +118,18 @@ def sanitize_entries(raw_entries, default_category):
         if not isinstance(item, dict):
             continue
 
-        try:
-            amount = round(float(item.get("amount", 0)), 2)
-        except (TypeError, ValueError):
-            amount = 0.0
+        amount = abs(round_currency(item.get("amount", 0)))
 
-        category = str(item.get("category") or default_category).strip()
+        category = sanitize_text(
+            item.get("category", default_category),
+            allow_empty=False,
+            default=default_category,
+        )
         if not category:
             category = default_category
 
         entry_date = str(item.get("date") or "").strip()
-        if not entry_date:
+        if not is_iso_date(entry_date):
             entry_date = date.today().isoformat()
 
         try:
@@ -104,9 +143,9 @@ def sanitize_entries(raw_entries, default_category):
                 "amount": amount,
                 "category": category,
                 "date": entry_date,
-                "source": str(item.get("source") or "balance-update"),
-                "name": str(item.get("name") or ""),
-                "icon": str(item.get("icon") or ""),
+                "source": sanitize_text(item.get("source", "balance-update"), max_length=64, default="balance-update"),
+                "name": sanitize_text(item.get("name", ""), max_length=MAX_TEXT_LENGTH, default=""),
+                "icon": sanitize_text(item.get("icon", ""), max_length=MAX_ICON_LENGTH, default=""),
             }
         )
 
@@ -126,9 +165,70 @@ def sanitize_totals(raw_totals):
             amount = round(float(value), 2)
         except (TypeError, ValueError):
             amount = 0.0
+        if amount < 0:
+            amount = 0.0
         cleaned_totals[category] = amount
 
     return cleaned_totals
+
+
+def sanitize_payment(payment):
+    if not isinstance(payment, dict):
+        payment = {}
+
+    try:
+        payment_id = int(payment.get("id", 0))
+    except (TypeError, ValueError):
+        payment_id = 0
+
+    frequency = str(payment.get("frequency", "once")).strip().lower()
+    if frequency not in VALID_PAYMENT_FREQUENCIES:
+        frequency = "once"
+
+    base_date = str(payment.get("date", "")).strip()
+    if not is_iso_date(base_date):
+        base_date = date.today().isoformat()
+
+    months = normalize_months(payment.get("months", [])) if frequency == "selected" else []
+
+    return {
+        "id": payment_id,
+        "name": sanitize_text(payment.get("name", ""), max_length=MAX_TEXT_LENGTH, allow_empty=False, default="Bez nazwy"),
+        "amount": abs(round_currency(payment.get("amount", 0))),
+        "date": base_date,
+        "frequency": frequency,
+        "months": months,
+        "paidDates": normalize_date_list(payment.get("paidDates", [])),
+        "type": "expense",
+    }
+
+
+def sanitize_income(income):
+    if not isinstance(income, dict):
+        income = {}
+
+    try:
+        income_id = int(income.get("id", 0))
+    except (TypeError, ValueError):
+        income_id = 0
+
+    frequency = str(income.get("frequency", "once")).strip().lower()
+    if frequency not in VALID_INCOME_FREQUENCIES:
+        frequency = "once"
+
+    base_date = str(income.get("date", "")).strip()
+    if not is_iso_date(base_date):
+        base_date = date.today().isoformat()
+
+    return {
+        "id": income_id,
+        "name": sanitize_text(income.get("name", ""), max_length=MAX_TEXT_LENGTH, allow_empty=False, default="Bez nazwy"),
+        "amount": abs(round_currency(income.get("amount", 0))),
+        "date": base_date,
+        "frequency": frequency,
+        "receivedDates": normalize_date_list(income.get("receivedDates", [])),
+        "type": "income",
+    }
 
 
 def parse_json_column(value, fallback):
@@ -157,6 +257,279 @@ def parse_iso_datetime(raw_value):
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def get_app_timezone():
+    try:
+        return ZoneInfo(APP_TIMEZONE_NAME)
+    except Exception:
+        try:
+            return ZoneInfo("Europe/Warsaw")
+        except Exception:
+            return timezone.utc
+
+
+def app_now():
+    return datetime.now(get_app_timezone())
+
+
+def round_currency(value):
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        parsed = 0.0
+    if not math.isfinite(parsed):
+        parsed = 0.0
+    return round(parsed, 2)
+
+
+def is_finite_number(value):
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return False
+    return math.isfinite(parsed)
+
+
+def sanitize_text(value, *, max_length=MAX_TEXT_LENGTH, default="", allow_empty=True):
+    text = str(value or "").strip()
+    if not text and not allow_empty:
+        text = default
+    if not text:
+        return default if default and not allow_empty else ""
+    return text[:max_length]
+
+
+def parse_iso_date(raw_value):
+    raw = str(raw_value or "").strip()
+    if not ISO_DATE_RE.match(raw):
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def is_iso_date(raw_value):
+    return parse_iso_date(raw_value) is not None
+
+
+def normalize_date_list(raw_dates):
+    if not isinstance(raw_dates, list):
+        return []
+    normalized = []
+    seen = set()
+    for raw_date in raw_dates:
+        parsed = parse_iso_date(raw_date)
+        if not parsed:
+            continue
+        formatted = parsed.isoformat()
+        if formatted in seen:
+            continue
+        seen.add(formatted)
+        normalized.append(formatted)
+    normalized.sort()
+    return normalized
+
+
+def normalize_months(raw_months):
+    if not isinstance(raw_months, list):
+        return []
+    normalized = sorted(
+        {
+            int(month)
+            for month in raw_months
+            if isinstance(month, (int, float, str)) and str(month).strip().isdigit()
+            and 1 <= int(month) <= 12
+        }
+    )
+    return normalized
+
+
+def build_category_totals(entries):
+    totals = {}
+    for entry in entries:
+        category = sanitize_text(entry.get("category", ""), allow_empty=False, default="inne")
+        totals[category] = round_currency(totals.get(category, 0) + round_currency(entry.get("amount", 0)))
+    return totals
+
+
+def add_validation_error(errors, field, message):
+    errors.append({"field": field, "message": message})
+
+
+def validate_state_payload(payload):
+    errors = []
+    if not isinstance(payload, dict):
+        add_validation_error(errors, "payload", "Payload must be a JSON object")
+        return errors
+
+    provided_keys = set(payload.keys())
+    missing_keys = sorted(STATE_REQUIRED_KEYS - provided_keys)
+    extra_keys = sorted(provided_keys - STATE_REQUIRED_KEYS)
+    for key in missing_keys:
+        add_validation_error(errors, key, "Missing required field")
+    for key in extra_keys:
+        add_validation_error(errors, key, "Unknown field")
+
+    version_value = payload.get("version")
+    if isinstance(version_value, bool) or not isinstance(version_value, int) or version_value < 1:
+        add_validation_error(errors, "version", "Version must be a positive integer")
+
+    balance_value = payload.get("balance")
+    if not is_finite_number(balance_value):
+        add_validation_error(errors, "balance", "Balance must be a finite number")
+
+    def validate_schedule_items(field_name, items, entry_kind):
+        if not isinstance(items, list):
+            add_validation_error(errors, field_name, "Must be an array")
+            return
+
+        seen_ids = set()
+        for idx, item in enumerate(items):
+            prefix = f"{field_name}[{idx}]"
+            if not isinstance(item, dict):
+                add_validation_error(errors, prefix, "Item must be an object")
+                continue
+
+            allowed_keys = {"id", "name", "amount", "date", "frequency", "type"}
+            if entry_kind == "payment":
+                allowed_keys.update({"months", "paidDates"})
+            else:
+                allowed_keys.update({"receivedDates"})
+            unknown = sorted(set(item.keys()) - allowed_keys)
+            for key in unknown:
+                add_validation_error(errors, f"{prefix}.{key}", "Unknown field")
+
+            item_id = item.get("id")
+            if isinstance(item_id, bool) or not isinstance(item_id, int) or item_id <= 0:
+                add_validation_error(errors, f"{prefix}.id", "ID must be a positive integer")
+            elif item_id in seen_ids:
+                add_validation_error(errors, f"{prefix}.id", "Duplicate ID")
+            else:
+                seen_ids.add(item_id)
+
+            name_value = sanitize_text(item.get("name", ""), allow_empty=False, default="")
+            if not name_value:
+                add_validation_error(errors, f"{prefix}.name", "Name is required")
+            if len(str(item.get("name", "")).strip()) > MAX_TEXT_LENGTH:
+                add_validation_error(errors, f"{prefix}.name", f"Name max length is {MAX_TEXT_LENGTH}")
+
+            amount_value = item.get("amount")
+            if not is_finite_number(amount_value) or float(amount_value) <= 0:
+                add_validation_error(errors, f"{prefix}.amount", "Amount must be > 0")
+
+            if not is_iso_date(item.get("date")):
+                add_validation_error(errors, f"{prefix}.date", "Date must be in YYYY-MM-DD format")
+
+            frequency = str(item.get("frequency", "")).strip().lower()
+            valid_freq = VALID_PAYMENT_FREQUENCIES if entry_kind == "payment" else VALID_INCOME_FREQUENCIES
+            if frequency not in valid_freq:
+                add_validation_error(errors, f"{prefix}.frequency", "Invalid frequency")
+
+            if entry_kind == "payment":
+                months = item.get("months", [])
+                if frequency == "selected":
+                    normalized_months = normalize_months(months)
+                    if not normalized_months:
+                        add_validation_error(errors, f"{prefix}.months", "Selected frequency requires at least one month")
+                    if len(normalized_months) != len(months):
+                        add_validation_error(errors, f"{prefix}.months", "Months must contain unique values from 1 to 12")
+                elif months not in ([], None):
+                    if isinstance(months, list) and len(months) > 0:
+                        add_validation_error(errors, f"{prefix}.months", "Months are allowed only for selected frequency")
+
+                paid_dates = item.get("paidDates", [])
+                if paid_dates not in (None, []) and not isinstance(paid_dates, list):
+                    add_validation_error(errors, f"{prefix}.paidDates", "paidDates must be an array")
+                if isinstance(paid_dates, list):
+                    normalized_paid = normalize_date_list(paid_dates)
+                    if any(not is_iso_date(raw_date) for raw_date in paid_dates):
+                        add_validation_error(errors, f"{prefix}.paidDates", "paidDates must contain valid YYYY-MM-DD dates")
+                    if len(normalized_paid) != len(paid_dates):
+                        add_validation_error(errors, f"{prefix}.paidDates", "paidDates must contain unique dates")
+            else:
+                received_dates = item.get("receivedDates", [])
+                if received_dates not in (None, []) and not isinstance(received_dates, list):
+                    add_validation_error(errors, f"{prefix}.receivedDates", "receivedDates must be an array")
+                if isinstance(received_dates, list):
+                    normalized_received = normalize_date_list(received_dates)
+                    if any(not is_iso_date(raw_date) for raw_date in received_dates):
+                        add_validation_error(errors, f"{prefix}.receivedDates", "receivedDates must contain valid YYYY-MM-DD dates")
+                    if len(normalized_received) != len(received_dates):
+                        add_validation_error(errors, f"{prefix}.receivedDates", "receivedDates must contain unique dates")
+
+    def validate_history_entries(field_name, entries):
+        if not isinstance(entries, list):
+            add_validation_error(errors, field_name, "Must be an array")
+            return
+
+        seen_ids = set()
+        for idx, entry in enumerate(entries):
+            prefix = f"{field_name}[{idx}]"
+            if not isinstance(entry, dict):
+                add_validation_error(errors, prefix, "Entry must be an object")
+                continue
+
+            allowed_keys = {"id", "amount", "category", "date", "source", "name", "icon"}
+            unknown = sorted(set(entry.keys()) - allowed_keys)
+            for key in unknown:
+                add_validation_error(errors, f"{prefix}.{key}", "Unknown field")
+
+            entry_id = entry.get("id")
+            if isinstance(entry_id, bool) or not isinstance(entry_id, int) or entry_id <= 0:
+                add_validation_error(errors, f"{prefix}.id", "ID must be a positive integer")
+            elif entry_id in seen_ids:
+                add_validation_error(errors, f"{prefix}.id", "Duplicate ID")
+            else:
+                seen_ids.add(entry_id)
+
+            amount_value = entry.get("amount")
+            if not is_finite_number(amount_value) or float(amount_value) <= 0:
+                add_validation_error(errors, f"{prefix}.amount", "Amount must be > 0")
+
+            category_text = str(entry.get("category", "")).strip()
+            if not category_text:
+                add_validation_error(errors, f"{prefix}.category", "Category is required")
+            if len(category_text) > MAX_TEXT_LENGTH:
+                add_validation_error(errors, f"{prefix}.category", f"Category max length is {MAX_TEXT_LENGTH}")
+
+            if not is_iso_date(entry.get("date")):
+                add_validation_error(errors, f"{prefix}.date", "Date must be in YYYY-MM-DD format")
+
+            name_text = str(entry.get("name", "")).strip()
+            if len(name_text) > MAX_TEXT_LENGTH:
+                add_validation_error(errors, f"{prefix}.name", f"Name max length is {MAX_TEXT_LENGTH}")
+
+            icon_text = str(entry.get("icon", "")).strip()
+            if len(icon_text) > MAX_ICON_LENGTH:
+                add_validation_error(errors, f"{prefix}.icon", f"Icon max length is {MAX_ICON_LENGTH}")
+
+    def validate_totals(field_name, totals):
+        if not isinstance(totals, dict):
+            add_validation_error(errors, field_name, "Must be an object")
+            return
+
+        for key, value in totals.items():
+            category = str(key).strip()
+            if not category:
+                add_validation_error(errors, field_name, "Category key cannot be empty")
+                continue
+            if len(category) > MAX_TEXT_LENGTH:
+                add_validation_error(errors, f"{field_name}.{category}", f"Category key max length is {MAX_TEXT_LENGTH}")
+            if not is_finite_number(value) or float(value) < 0:
+                add_validation_error(errors, f"{field_name}.{category}", "Total must be a finite number >= 0")
+
+    validate_schedule_items("payments", payload.get("payments"), "payment")
+    validate_schedule_items("incomes", payload.get("incomes"), "income")
+    validate_history_entries("expenseEntries", payload.get("expenseEntries"))
+    validate_history_entries("incomeEntries", payload.get("incomeEntries"))
+    validate_totals("expenseCategoryTotals", payload.get("expenseCategoryTotals"))
+    validate_totals("incomeCategoryTotals", payload.get("incomeCategoryTotals"))
+    return errors
 
 
 def path_is_within(child_path, parent_path):
@@ -291,9 +664,7 @@ def sanitize_state(raw_state):
     if not isinstance(raw_state, dict):
         raw_state = {}
 
-    pin = str(raw_state.get("pin", DEFAULT_STATE["pin"]))
-    if not pin:
-        pin = DEFAULT_STATE["pin"]
+    pin = DEPRECATED_PIN_VALUE
 
     try:
         version = int(raw_state.get("version", DEFAULT_STATE["version"]))
@@ -302,10 +673,7 @@ def sanitize_state(raw_state):
     if version < 1:
         version = 1
 
-    try:
-        balance = float(raw_state.get("balance", DEFAULT_STATE["balance"]))
-    except (TypeError, ValueError):
-        balance = DEFAULT_STATE["balance"]
+    balance = round_currency(raw_state.get("balance", DEFAULT_STATE["balance"]))
 
     payments = raw_state.get("payments", [])
     incomes = raw_state.get("incomes", [])
@@ -319,16 +687,21 @@ def sanitize_state(raw_state):
     if not isinstance(incomes, list):
         incomes = []
 
+    cleaned_payments = [sanitize_payment(payment) for payment in payments]
+    cleaned_incomes = [sanitize_income(income) for income in incomes]
+    cleaned_expense_entries = sanitize_entries(expense_entries, "inne")
+    cleaned_income_entries = sanitize_entries(income_entries, "inne")
+
     return {
         "pin": pin,
         "version": version,
         "balance": balance,
-        "payments": payments,
-        "incomes": incomes,
-        "expenseEntries": sanitize_entries(expense_entries, "inne"),
-        "incomeEntries": sanitize_entries(income_entries, "inne"),
-        "expenseCategoryTotals": sanitize_totals(expense_totals),
-        "incomeCategoryTotals": sanitize_totals(income_totals),
+        "payments": cleaned_payments,
+        "incomes": cleaned_incomes,
+        "expenseEntries": cleaned_expense_entries,
+        "incomeEntries": cleaned_income_entries,
+        "expenseCategoryTotals": build_category_totals(cleaned_expense_entries),
+        "incomeCategoryTotals": build_category_totals(cleaned_income_entries),
     }
 
 
@@ -390,7 +763,6 @@ def update_auth_pin(new_pin):
                     """,
                     (pin_hash, salt_hex, params),
                 )
-            conn.execute("UPDATE app_state SET pin = ? WHERE id = 1", (normalize_pin(new_pin),))
             conn.commit()
         finally:
             conn.close()
@@ -596,6 +968,295 @@ def delete_session_token(raw_token):
             conn.close()
 
 
+def get_month_occurrence_date(base_date, year, month):
+    if month == 12:
+        next_month = date(year + 1, 1, 1)
+    else:
+        next_month = date(year, month + 1, 1)
+    last_day = (next_month - timedelta(days=1)).day
+    day = min(base_date.day, last_day)
+    return date(year, month, day)
+
+
+def get_payment_occurrence_for_month(payment, year, month):
+    base_date = parse_iso_date(payment.get("date"))
+    if not base_date:
+        return None
+
+    frequency = str(payment.get("frequency", "once")).strip().lower()
+    if frequency == "once":
+        if base_date.year == year and base_date.month == month:
+            return base_date.isoformat()
+        return None
+
+    if frequency == "monthly":
+        occurrence = get_month_occurrence_date(base_date, year, month)
+        return occurrence.isoformat() if occurrence >= base_date else None
+
+    if frequency == "selected":
+        months = normalize_months(payment.get("months", []))
+        if month not in months:
+            return None
+        occurrence = get_month_occurrence_date(base_date, year, month)
+        return occurrence.isoformat() if occurrence >= base_date else None
+
+    return None
+
+
+def get_income_occurrence_for_month(income, year, month):
+    base_date = parse_iso_date(income.get("date"))
+    if not base_date:
+        return None
+
+    frequency = str(income.get("frequency", "once")).strip().lower()
+    if frequency == "once":
+        if base_date.year == year and base_date.month == month:
+            return base_date.isoformat()
+        return None
+
+    if frequency == "monthly":
+        occurrence = get_month_occurrence_date(base_date, year, month)
+        return occurrence.isoformat() if occurrence >= base_date else None
+
+    return None
+
+
+def is_paid_occurrence(payment, occurrence):
+    paid_dates = normalize_date_list(payment.get("paidDates", []))
+    return occurrence in paid_dates
+
+
+def is_received_occurrence(income, occurrence):
+    received_dates = normalize_date_list(income.get("receivedDates", []))
+    return occurrence in received_dates
+
+
+def get_due_payment_occurrences(payment, today_value, include_today):
+    due = []
+    base_date = parse_iso_date(payment.get("date"))
+    if not base_date:
+        return due
+
+    today_iso = today_value.isoformat()
+    frequency = str(payment.get("frequency", "once")).strip().lower()
+
+    if frequency == "once":
+        occurrence = base_date.isoformat()
+        is_due = occurrence < today_iso or (include_today and occurrence == today_iso)
+        if is_due and not is_paid_occurrence(payment, occurrence):
+            due.append(occurrence)
+        return due
+
+    month_cursor = date(base_date.year, base_date.month, 1)
+    target_month = date(today_value.year, today_value.month, 1)
+    while month_cursor <= target_month:
+        occurrence = get_payment_occurrence_for_month(payment, month_cursor.year, month_cursor.month)
+        if occurrence and not is_paid_occurrence(payment, occurrence):
+            is_due = occurrence < today_iso or (include_today and occurrence == today_iso)
+            if is_due:
+                due.append(occurrence)
+        if month_cursor.month == 12:
+            month_cursor = date(month_cursor.year + 1, 1, 1)
+        else:
+            month_cursor = date(month_cursor.year, month_cursor.month + 1, 1)
+    return due
+
+
+def get_due_income_occurrences(income, today_value, include_today):
+    due = []
+    base_date = parse_iso_date(income.get("date"))
+    if not base_date:
+        return due
+
+    today_iso = today_value.isoformat()
+    frequency = str(income.get("frequency", "once")).strip().lower()
+
+    if frequency == "once":
+        occurrence = base_date.isoformat()
+        is_due = occurrence < today_iso or (include_today and occurrence == today_iso)
+        if is_due and not is_received_occurrence(income, occurrence):
+            due.append(occurrence)
+        return due
+
+    month_cursor = date(base_date.year, base_date.month, 1)
+    target_month = date(today_value.year, today_value.month, 1)
+    while month_cursor <= target_month:
+        occurrence = get_income_occurrence_for_month(income, month_cursor.year, month_cursor.month)
+        if occurrence and not is_received_occurrence(income, occurrence):
+            is_due = occurrence < today_iso or (include_today and occurrence == today_iso)
+            if is_due:
+                due.append(occurrence)
+        if month_cursor.month == 12:
+            month_cursor = date(month_cursor.year + 1, 1, 1)
+        else:
+            month_cursor = date(month_cursor.year, month_cursor.month + 1, 1)
+    return due
+
+
+def next_entry_id(expense_entries, income_entries):
+    max_id = 0
+    for entry in list(expense_entries) + list(income_entries):
+        try:
+            entry_id = int(entry.get("id", 0))
+        except (TypeError, ValueError):
+            entry_id = 0
+        if entry_id > max_id:
+            max_id = entry_id
+    return max_id + 1
+
+
+def apply_server_settlement(state, run_reason):
+    clean_state = sanitize_state(state)
+    now_local = app_now()
+    include_today = now_local.hour >= 12
+    today_local = now_local.date()
+    today_iso = today_local.isoformat()
+
+    settled_payments = 0
+    settled_incomes = 0
+    balance_delta = 0.0
+    ledger_events = []
+
+    expenses = list(clean_state.get("expenseEntries", []))
+    incomes = list(clean_state.get("incomeEntries", []))
+    payments = []
+    incomes_plan = []
+    next_id = next_entry_id(expenses, incomes)
+
+    for payment in clean_state.get("payments", []):
+        payment_item = sanitize_payment(payment)
+        due_occurrences = get_due_payment_occurrences(payment_item, today_local, include_today)
+        if not due_occurrences:
+            payments.append(payment_item)
+            continue
+
+        amount_value = abs(round_currency(payment_item.get("amount", 0)))
+        paid_dates = set(normalize_date_list(payment_item.get("paidDates", [])))
+        keep_item = payment_item.get("frequency") != "once"
+
+        for occurrence in due_occurrences:
+            if amount_value <= 0:
+                continue
+            if occurrence in paid_dates:
+                continue
+
+            settled_payments += 1
+            balance_delta = round_currency(balance_delta - amount_value)
+            expenses.append(
+                {
+                    "id": next_id,
+                    "amount": amount_value,
+                    "category": "zaplanowane płatności",
+                    "date": occurrence,
+                    "source": "planned-payment",
+                    "name": sanitize_text(payment_item.get("name", ""), default=""),
+                    "icon": "📅",
+                }
+            )
+            next_id += 1
+            paid_dates.add(occurrence)
+            ledger_events.append(
+                {
+                    "referenceKey": f"settlement:payment:{int(payment_item.get('id', 0))}:{occurrence}",
+                    "eventType": "settlement_payment",
+                    "amount": -amount_value,
+                    "effectiveDate": occurrence,
+                    "details": {
+                        "paymentId": int(payment_item.get("id", 0)),
+                        "paymentName": payment_item.get("name", ""),
+                        "frequency": payment_item.get("frequency", "once"),
+                        "source": "planned-payment",
+                        "runReason": run_reason,
+                    },
+                }
+            )
+
+        if keep_item:
+            payment_item["paidDates"] = sorted(paid_dates)
+            payments.append(payment_item)
+
+    for income in clean_state.get("incomes", []):
+        income_item = sanitize_income(income)
+        due_occurrences = get_due_income_occurrences(income_item, today_local, include_today)
+        if not due_occurrences:
+            incomes_plan.append(income_item)
+            continue
+
+        amount_value = abs(round_currency(income_item.get("amount", 0)))
+        received_dates = set(normalize_date_list(income_item.get("receivedDates", [])))
+        keep_item = income_item.get("frequency") != "once"
+
+        for occurrence in due_occurrences:
+            if amount_value <= 0:
+                continue
+            if occurrence in received_dates:
+                continue
+
+            settled_incomes += 1
+            balance_delta = round_currency(balance_delta + amount_value)
+            incomes.append(
+                {
+                    "id": next_id,
+                    "amount": amount_value,
+                    "category": "zaplanowane wpływy",
+                    "date": occurrence,
+                    "source": "planned-income",
+                    "name": sanitize_text(income_item.get("name", ""), default=""),
+                    "icon": "📅",
+                }
+            )
+            next_id += 1
+            received_dates.add(occurrence)
+            ledger_events.append(
+                {
+                    "referenceKey": f"settlement:income:{int(income_item.get('id', 0))}:{occurrence}",
+                    "eventType": "settlement_income",
+                    "amount": amount_value,
+                    "effectiveDate": occurrence,
+                    "details": {
+                        "incomeId": int(income_item.get("id", 0)),
+                        "incomeName": income_item.get("name", ""),
+                        "frequency": income_item.get("frequency", "once"),
+                        "source": "planned-income",
+                        "runReason": run_reason,
+                    },
+                }
+            )
+
+        if keep_item:
+            income_item["receivedDates"] = sorted(received_dates)
+            incomes_plan.append(income_item)
+
+    if settled_payments == 0 and settled_incomes == 0:
+        return clean_state, {
+            "changed": False,
+            "settledPayments": 0,
+            "settledIncomes": 0,
+            "balanceDelta": 0.0,
+            "runAt": now_local.isoformat(),
+            "today": today_iso,
+            "includeToday": include_today,
+        }, []
+
+    clean_state["payments"] = payments
+    clean_state["incomes"] = incomes_plan
+    clean_state["expenseEntries"] = sanitize_entries(expenses, "inne")
+    clean_state["incomeEntries"] = sanitize_entries(incomes, "inne")
+    clean_state["expenseCategoryTotals"] = build_category_totals(clean_state["expenseEntries"])
+    clean_state["incomeCategoryTotals"] = build_category_totals(clean_state["incomeEntries"])
+    clean_state["balance"] = round_currency(clean_state.get("balance", 0) + balance_delta)
+
+    return clean_state, {
+        "changed": True,
+        "settledPayments": settled_payments,
+        "settledIncomes": settled_incomes,
+        "balanceDelta": round_currency(balance_delta),
+        "runAt": now_local.isoformat(),
+        "today": today_iso,
+        "includeToday": include_today,
+    }, ledger_events
+
+
 def sync_transactions_from_state(clean_state, conn):
     now_iso = isoformat_utc(utcnow())
     expected_keys = {"expense": set(), "income": set()}
@@ -658,6 +1319,197 @@ def sync_transactions_from_state(clean_state, conn):
             )
         else:
             conn.execute("DELETE FROM transactions WHERE entry_type = ?", (entry_type,))
+
+
+def insert_ledger_events(conn, ledger_events):
+    if not ledger_events:
+        return 0
+
+    inserted = 0
+    now_iso = isoformat_utc(utcnow())
+    for event in ledger_events:
+        reference_key = sanitize_text(event.get("referenceKey", ""), max_length=160, allow_empty=False, default="")
+        event_type = sanitize_text(event.get("eventType", ""), max_length=64, allow_empty=False, default="")
+        effective_date = str(event.get("effectiveDate", "")).strip()
+        amount = round_currency(event.get("amount", 0))
+        details = event.get("details", {})
+        if (
+            not reference_key
+            or not event_type
+            or not is_iso_date(effective_date)
+            or not isinstance(details, dict)
+            or amount == 0
+        ):
+            continue
+
+        event_id = str(uuid.uuid4())
+        cursor = conn.execute(
+            """
+            INSERT OR IGNORE INTO ledger_events (
+                event_id, reference_key, event_type, amount, effective_date, currency, details_json, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, 'PLN', ?, ?)
+            """,
+            (
+                event_id,
+                reference_key,
+                event_type,
+                amount,
+                effective_date,
+                json.dumps(details, ensure_ascii=False),
+                now_iso,
+            ),
+        )
+        if cursor.rowcount > 0:
+            inserted += 1
+    return inserted
+
+
+def build_manual_balance_ledger_events(old_state, new_state, expected_version):
+    events = []
+    old_expense_ids = {
+        int(entry.get("id", 0))
+        for entry in old_state.get("expenseEntries", [])
+        if isinstance(entry, dict)
+    }
+    old_income_ids = {
+        int(entry.get("id", 0))
+        for entry in old_state.get("incomeEntries", [])
+        if isinstance(entry, dict)
+    }
+
+    tracked_delta = 0.0
+    for entry in new_state.get("expenseEntries", []):
+        if not isinstance(entry, dict):
+            continue
+        entry_id = int(entry.get("id", 0))
+        source = str(entry.get("source", "")).strip()
+        if entry_id in old_expense_ids or source != "balance-update":
+            continue
+        amount = abs(round_currency(entry.get("amount", 0)))
+        if amount <= 0:
+            continue
+        tracked_delta = round_currency(tracked_delta - amount)
+        events.append(
+            {
+                "referenceKey": f"manual:expense:{entry_id}",
+                "eventType": "manual_balance_expense",
+                "amount": -amount,
+                "effectiveDate": str(entry.get("date", date.today().isoformat())),
+                "details": {
+                    "entryId": entry_id,
+                    "category": entry.get("category", ""),
+                    "name": entry.get("name", ""),
+                    "source": source,
+                    "expectedVersion": expected_version,
+                },
+            }
+        )
+
+    for entry in new_state.get("incomeEntries", []):
+        if not isinstance(entry, dict):
+            continue
+        entry_id = int(entry.get("id", 0))
+        source = str(entry.get("source", "")).strip()
+        if entry_id in old_income_ids or source != "balance-update":
+            continue
+        amount = abs(round_currency(entry.get("amount", 0)))
+        if amount <= 0:
+            continue
+        tracked_delta = round_currency(tracked_delta + amount)
+        events.append(
+            {
+                "referenceKey": f"manual:income:{entry_id}",
+                "eventType": "manual_balance_income",
+                "amount": amount,
+                "effectiveDate": str(entry.get("date", date.today().isoformat())),
+                "details": {
+                    "entryId": entry_id,
+                    "category": entry.get("category", ""),
+                    "name": entry.get("name", ""),
+                    "source": source,
+                    "expectedVersion": expected_version,
+                },
+            }
+        )
+
+    old_balance = round_currency(old_state.get("balance", 0))
+    new_balance = round_currency(new_state.get("balance", 0))
+    delta = round_currency(new_balance - old_balance)
+    remainder = round_currency(delta - tracked_delta)
+    if remainder != 0:
+        events.append(
+            {
+                "referenceKey": f"manual:adjustment:v{int(expected_version) + 1}",
+                "eventType": "manual_balance_adjustment",
+                "amount": remainder,
+                "effectiveDate": date.today().isoformat(),
+                "details": {
+                    "oldBalance": old_balance,
+                    "newBalance": new_balance,
+                    "trackedDelta": tracked_delta,
+                    "expectedVersion": expected_version,
+                },
+            }
+        )
+    return events
+
+
+def update_settlement_status(summary):
+    SETTLEMENT_STATUS["lastRunAt"] = summary.get("runAt")
+    SETTLEMENT_STATUS["timezone"] = APP_TIMEZONE_NAME
+    SETTLEMENT_STATUS["changed"] = bool(summary.get("changed"))
+    SETTLEMENT_STATUS["summary"] = {
+        "settledPayments": int(summary.get("settledPayments", 0)),
+        "settledIncomes": int(summary.get("settledIncomes", 0)),
+        "balanceDelta": round_currency(summary.get("balanceDelta", 0)),
+    }
+
+
+def run_server_settlement(run_reason="auto"):
+    for _ in range(3):
+        current_state = read_state()
+        expected_version = int(current_state.get("version", 1))
+        settled_state, summary, ledger_events = apply_server_settlement(current_state, run_reason)
+        if not summary.get("changed"):
+            update_settlement_status(summary)
+            return {
+                "ok": True,
+                "changed": False,
+                "state": current_state,
+                "summary": summary,
+            }
+
+        try:
+            saved_state = write_state(
+                settled_state,
+                expected_version=expected_version,
+                ledger_events=ledger_events,
+            )
+            update_settlement_status(summary)
+            return {
+                "ok": True,
+                "changed": True,
+                "state": saved_state,
+                "summary": summary,
+            }
+        except StateConflictError:
+            continue
+
+    return {
+        "ok": False,
+        "changed": False,
+        "state": read_state(),
+        "summary": {
+            "changed": False,
+            "settledPayments": 0,
+            "settledIncomes": 0,
+            "balanceDelta": 0.0,
+            "runAt": app_now().isoformat(),
+            "today": app_now().date().isoformat(),
+            "includeToday": app_now().hour >= 12,
+        },
+    }
 
 
 def parse_month_range(month_value):
@@ -873,7 +1725,7 @@ def init_db():
                     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, 1)
                     """,
                     (
-                        DEFAULT_STATE["pin"],
+                        DEPRECATED_PIN_VALUE,
                         DEFAULT_STATE["balance"],
                         json.dumps(DEFAULT_STATE["payments"], ensure_ascii=False),
                         json.dumps(DEFAULT_STATE["incomes"], ensure_ascii=False),
@@ -937,6 +1789,21 @@ def init_db():
             )
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS ledger_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_id TEXT NOT NULL UNIQUE,
+                    reference_key TEXT NOT NULL UNIQUE,
+                    event_type TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    effective_date TEXT NOT NULL,
+                    currency TEXT NOT NULL DEFAULT 'PLN',
+                    details_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_transactions_type_date
                 ON transactions (entry_type, entry_date)
                 """
@@ -945,6 +1812,12 @@ def init_db():
                 """
                 CREATE INDEX IF NOT EXISTS idx_transactions_type_category_date
                 ON transactions (entry_type, category, entry_date)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_ledger_events_type_date
+                ON ledger_events (event_type, effective_date)
                 """
             )
 
@@ -960,9 +1833,9 @@ def init_db():
             auth_meta_row = conn.execute("SELECT id FROM auth_meta WHERE id = 1").fetchone()
             if auth_meta_row is None:
                 legacy_pin_row = conn.execute("SELECT pin FROM app_state WHERE id = 1").fetchone()
-                legacy_pin = normalize_pin(legacy_pin_row[0]) if legacy_pin_row else DEFAULT_STATE["pin"]
+                legacy_pin = normalize_pin(legacy_pin_row[0]) if legacy_pin_row else "1234"
                 if not is_valid_pin(legacy_pin):
-                    legacy_pin = DEFAULT_STATE["pin"]
+                    legacy_pin = "1234"
                 pin_salt = secrets.token_hex(16)
                 pin_hash = hash_pin(legacy_pin, pin_salt, PIN_SCRYPT_PARAMS)
                 conn.execute(
@@ -976,6 +1849,10 @@ def init_db():
                         json.dumps(PIN_SCRYPT_PARAMS, ensure_ascii=False),
                     ),
                 )
+            conn.execute(
+                "UPDATE app_state SET pin = ? WHERE id = 1",
+                (DEPRECATED_PIN_VALUE,),
+            )
 
             state_row = conn.execute(
                 """
@@ -1062,12 +1939,8 @@ def read_state():
     )
 
 
-def write_state(state, expected_version=None):
+def write_state(state, expected_version=None, ledger_events=None):
     raw_state = state if isinstance(state, dict) else {}
-    if "pin" not in raw_state:
-        existing_state = read_state()
-        raw_state = {**raw_state, "pin": existing_state.get("pin", DEFAULT_STATE["pin"])}
-
     clean_state = sanitize_state(raw_state)
     with DB_LOCK:
         conn = sqlite3.connect(DB_PATH)
@@ -1090,7 +1963,7 @@ def write_state(state, expected_version=None):
                     WHERE id = 1 AND version = ?
                     """,
                     (
-                        clean_state["pin"],
+                        DEPRECATED_PIN_VALUE,
                         clean_state["balance"],
                         json.dumps(clean_state["payments"], ensure_ascii=False),
                         json.dumps(clean_state["incomes"], ensure_ascii=False),
@@ -1119,7 +1992,7 @@ def write_state(state, expected_version=None):
                     WHERE id = 1
                     """,
                     (
-                        clean_state["pin"],
+                        DEPRECATED_PIN_VALUE,
                         clean_state["balance"],
                         json.dumps(clean_state["payments"], ensure_ascii=False),
                         json.dumps(clean_state["incomes"], ensure_ascii=False),
@@ -1144,7 +2017,7 @@ def write_state(state, expected_version=None):
                     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, 1)
                     """,
                     (
-                        clean_state["pin"],
+                        DEPRECATED_PIN_VALUE,
                         clean_state["balance"],
                         json.dumps(clean_state["payments"], ensure_ascii=False),
                         json.dumps(clean_state["incomes"], ensure_ascii=False),
@@ -1157,7 +2030,9 @@ def write_state(state, expected_version=None):
 
             version_row = conn.execute("SELECT version FROM app_state WHERE id = 1").fetchone()
             clean_state["version"] = int(version_row[0]) if version_row else 1
+            clean_state["pin"] = DEPRECATED_PIN_VALUE
             sync_transactions_from_state(clean_state, conn)
+            insert_ledger_events(conn, ledger_events or [])
             conn.commit()
         finally:
             conn.close()
@@ -1166,13 +2041,66 @@ def write_state(state, expected_version=None):
 
 
 class BudgetRequestHandler(SimpleHTTPRequestHandler):
+    def _add_security_headers(self):
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header(
+            "Permissions-Policy",
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+        )
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "manifest-src 'self'; "
+            "worker-src 'self'; "
+            "object-src 'none'; "
+            "base-uri 'self'; "
+            "frame-ancestors 'none'",
+        )
+
+    def end_headers(self):
+        self._add_security_headers()
+        super().end_headers()
+
+    def _serve_static_asset(self, route_path):
+        relative_name = STATIC_FILE_WHITELIST.get(route_path)
+        if not relative_name:
+            self.send_error(404, "Not Found")
+            return
+
+        base_dir = Path(__file__).resolve().parent
+        target_path = (base_dir / relative_name).resolve()
+        if not target_path.is_file() or not path_is_within(target_path, base_dir):
+            self.send_error(404, "Not Found")
+            return
+
+        try:
+            payload = target_path.read_bytes()
+        except OSError:
+            self.send_error(500, "Unable to read static file")
+            return
+
+        content_type = mimetypes.guess_type(str(target_path))[0] or "application/octet-stream"
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
     def _send_json(self, status_code, payload, extra_headers=None):
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status_code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Pragma", "no-cache")
-        self.send_header("X-Content-Type-Options", "nosniff")
         if extra_headers:
             for header_name, header_value in extra_headers:
                 self.send_header(header_name, header_value)
@@ -1186,7 +2114,6 @@ class BudgetRequestHandler(SimpleHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Cache-Control", "no-store")
         self.send_header("Pragma", "no-cache")
-        self.send_header("X-Content-Type-Options", "nosniff")
         if filename:
             self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
         self.send_header("Content-Length", str(len(data)))
@@ -1248,6 +2175,7 @@ class BudgetRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(401, {"error": "unauthorized"})
             return
 
+        run_server_settlement("state_get")
         state = read_state()
         state.pop("pin", None)
         self._send_json(200, state)
@@ -1259,41 +2187,41 @@ class BudgetRequestHandler(SimpleHTTPRequestHandler):
 
         payload = self._parse_json_body()
         if payload is None:
-            self._send_json(400, {"error": "Invalid JSON body"})
+            self._send_json(400, {"error": "invalid_json"})
             return
 
-        # Backward compatibility for stale clients:
-        # if version is missing, allow save in legacy mode (no conflict check).
-        expected_version = None
-        if "version" in payload:
-            try:
-                expected_version = int(payload.get("version"))
-            except (TypeError, ValueError):
-                current_state = read_state()
-                self._send_json(
-                    400,
-                    {
-                        "error": "invalid_version",
-                        "current_version": int(current_state.get("version", 1)),
-                    },
-                )
-                return
-            if expected_version < 1:
-                current_state = read_state()
-                self._send_json(
-                    400,
-                    {
-                        "error": "invalid_version",
-                        "current_version": int(current_state.get("version", 1)),
-                    },
-                )
-                return
+        run_server_settlement("state_put")
+
+        validation_errors = validate_state_payload(payload)
+        if validation_errors:
+            self._send_json(
+                422,
+                {
+                    "error": "invalid_state_payload",
+                    "details": validation_errors,
+                },
+            )
+            return
+
+        expected_version = int(payload.get("version"))
+        current_state = read_state()
 
         payload_without_version = {
             key: value for key, value in payload.items() if key != "version"
         }
+        next_state = sanitize_state(payload_without_version)
+        manual_ledger_events = build_manual_balance_ledger_events(
+            current_state,
+            next_state,
+            expected_version,
+        )
+
         try:
-            saved = write_state(payload_without_version, expected_version=expected_version)
+            saved = write_state(
+                next_state,
+                expected_version=expected_version,
+                ledger_events=manual_ledger_events,
+            )
         except StateConflictError as exc:
             self._send_json(
                 409,
@@ -1321,6 +2249,37 @@ class BudgetRequestHandler(SimpleHTTPRequestHandler):
 
     def _handle_auth_status(self):
         self._send_json(200, {"authenticated": self._is_authenticated()})
+
+    def _handle_settlements_status_get(self):
+        if not self._is_authenticated():
+            self._send_json(401, {"error": "unauthorized"})
+            return
+        self._send_json(200, dict(SETTLEMENT_STATUS))
+
+    def _handle_settlements_run(self):
+        if not self._is_authenticated():
+            self._send_json(401, {"error": "unauthorized"})
+            return
+
+        payload = self._parse_json_body()
+        reason = "manual"
+        if isinstance(payload, dict):
+            reason_raw = sanitize_text(payload.get("reason", "manual"), max_length=64, default="manual")
+            if reason_raw:
+                reason = reason_raw
+
+        result = run_server_settlement(reason)
+        state = result.get("state") or read_state()
+        state.pop("pin", None)
+        self._send_json(
+            200,
+            {
+                "ok": bool(result.get("ok")),
+                "changed": bool(result.get("changed")),
+                "summary": result.get("summary", {}),
+                "state": state,
+            },
+        )
 
     def _handle_storage_status_get(self):
         if not self._is_authenticated():
@@ -1460,6 +2419,9 @@ class BudgetRequestHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/state":
             self._handle_state_get()
             return
+        if parsed.path == "/api/settlements/status":
+            self._handle_settlements_status_get()
+            return
         if parsed.path == "/api/storage/status":
             self._handle_storage_status_get()
             return
@@ -1473,13 +2435,13 @@ class BudgetRequestHandler(SimpleHTTPRequestHandler):
             self._handle_auth_status()
             return
 
-        if parsed.path == "/":
-            self.path = "/budget-app.html"
-
-        super().do_GET()
+        self._serve_static_asset(parsed.path)
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/settlements/run":
+            self._handle_settlements_run()
+            return
         if parsed.path == "/api/auth/login":
             self._handle_auth_login()
             return

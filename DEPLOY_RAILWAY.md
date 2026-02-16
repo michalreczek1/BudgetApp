@@ -25,6 +25,7 @@ In Railway -> Variables:
 - `PERSISTENT_MOUNT_PATH=/data` (optional, default `/data`)
 - `BACKUP_INTERVAL_SECONDS=21600` (optional, every 6h)
 - `BACKUP_RETENTION_COUNT=30` (optional)
+- `APP_TIMEZONE=Europe/Warsaw` (recommended for settlement cutoff at 12:00)
 
 `PORT` is injected by Railway automatically.
 
@@ -47,7 +48,10 @@ Railway uses:
 2. Check storage status endpoint:
    - `GET /api/storage/status` (requires auth)
    - expected: `"safe": true`, `"requiredMountPresent": true`, `"dbOnRequiredMount": true`
-3. Confirm logs contain mount message and DB path:
+3. Check settlement status endpoint:
+   - `GET /api/settlements/status` (requires auth)
+   - expected timezone: `"Europe/Warsaw"`
+4. Confirm logs contain mount message and DB path:
    - `Mounting volume ...`
    - `Database: /data/budget.db`
 
@@ -80,4 +84,3 @@ $env:PORT="8080"
 $env:DB_PATH="budget.db"
 python server.py
 ```
-

@@ -1126,7 +1126,7 @@
 
             <div class="input-group hidden" id="balanceCategoryOtherGroup">
                 <label id="balanceCategoryOtherLabel">Wpisz nazwę kategorii</label>
-                <input type="text" id="balanceCategoryOtherInput" placeholder="np. Fryzjer, Sprzedaż roweru">
+                <input type="text" id="balanceCategoryOtherInput" placeholder="np. Fryzjer, Sprzedaż roweru" maxlength="120">
             </div>
 
             <div class="modal-actions">
@@ -1194,7 +1194,7 @@
             
             <div class="input-group">
                 <label>Nazwa wpływu</label>
-                <input type="text" id="incomeName" placeholder="np. Wypłata, Premia, Zwrot">
+                <input type="text" id="incomeName" placeholder="np. Wypłata, Premia, Zwrot" maxlength="120">
             </div>
 
             <div class="input-group">
@@ -1237,7 +1237,7 @@
             
             <div class="input-group">
                 <label>Nazwa płatności</label>
-                <input type="text" id="paymentName" placeholder="np. Czynsz, Prąd, Internet">
+                <input type="text" id="paymentName" placeholder="np. Czynsz, Prąd, Internet" maxlength="120">
             </div>
 
             <div class="input-group">
@@ -1349,6 +1349,7 @@
             INCOME_TOTALS: 'budget_income_totals'
         };
         const ADMIN_SUCCESS_DEFAULT_MESSAGE = 'PIN został pomyślnie zmieniony!';
+        const MAX_TEXT_LENGTH = 120;
 
         const EXPENSE_CATEGORY_OPTIONS = [
             { value: 'jedzenie', label: '🍽️ Jedzenie', icon: '🍽️' },
@@ -1690,7 +1691,10 @@
                     savePending = false;
                     return;
                 }
-                if (error?.status === 400 && error?.details?.error === 'invalid_version') {
+                if (
+                    (error?.status === 400 && error?.details?.error === 'invalid_version') ||
+                    (error?.status === 422 && error?.details?.error === 'invalid_state_payload')
+                ) {
                     try {
                         await fetchStateFromServer();
                         loadData();
@@ -1700,7 +1704,7 @@
                         if (document.getElementById('incomeAnalysisModal').classList.contains('active')) {
                             renderIncomeAnalysis();
                         }
-                        alert('Wykryto niezgodność wersji danych. Stan został odświeżony z serwera.');
+                        alert('Wykryto błąd walidacji lub wersji danych. Stan został odświeżony z serwera.');
                     } catch (refreshError) {
                         if (refreshError?.status === 401) {
                             handleUnauthorizedSession('Sesja wygasła. Zaloguj się ponownie.');
@@ -1870,7 +1874,6 @@
                 queueStateSave();
                 showMainAppScreen();
                 loadData();
-                startNoonWatcher();
             } else {
                 showLoginScreen();
             }
@@ -1943,7 +1946,6 @@
                 ensureTrackingDataConsistency();
                 showMainAppScreen();
                 loadData();
-                startNoonWatcher();
             } catch (error) {
                 console.error('Błąd logowania:', error);
                 errorElement.textContent = 'Błąd połączenia z serwerem.';
@@ -1966,8 +1968,6 @@
         }
 
         function loadData() {
-            processDuePaymentsAtNoon();
-            processDueIncomesAtNoon();
             updateViewMonthLabel();
             loadBalance();
             loadPayments();
@@ -2050,7 +2050,7 @@
             }
 
             let finalCategory = selectedBalanceCategory;
-            const otherInput = document.getElementById('balanceCategoryOtherInput').value.trim();
+            const otherInput = normalizeUserText(document.getElementById('balanceCategoryOtherInput').value);
             if (selectedBalanceCategory === 'inne') {
                 if (!otherInput) {
                     alert('Wpisz nazwę kategorii "inne"');
@@ -2363,14 +2363,14 @@
 
         function recordExpenseEntry({ amount, category, date, source, name }) {
             const entries = parseStoredJSON(STORAGE_KEYS.EXPENSE_ENTRIES, []);
-            const categoryName = (category || '').trim() || 'inne';
+            const categoryName = normalizeUserText(category) || 'inne';
             entries.push({
                 id: Date.now() + Math.floor(Math.random() * 1000),
                 amount: roundCurrency(amount),
                 category: categoryName,
                 date: date || formatDateString(new Date()),
                 source: source || 'balance-update',
-                name: name || '',
+                name: normalizeUserText(name),
                 icon: getCategoryIcon(categoryName, 'expense')
             });
             appStorage.setItem(STORAGE_KEYS.EXPENSE_ENTRIES, JSON.stringify(entries));
@@ -2382,14 +2382,14 @@
 
         function recordIncomeEntry({ amount, category, date, source, name }) {
             const entries = parseStoredJSON(STORAGE_KEYS.INCOME_ENTRIES, []);
-            const categoryName = (category || '').trim() || 'inne';
+            const categoryName = normalizeUserText(category) || 'inne';
             entries.push({
                 id: Date.now() + Math.floor(Math.random() * 1000),
                 amount: roundCurrency(amount),
                 category: categoryName,
                 date: date || formatDateString(new Date()),
                 source: source || 'balance-update',
-                name: name || '',
+                name: normalizeUserText(name),
                 icon: getCategoryIcon(categoryName, 'income')
             });
             appStorage.setItem(STORAGE_KEYS.INCOME_ENTRIES, JSON.stringify(entries));
@@ -2423,6 +2423,10 @@
             }
 
             return formatDateString(parsedDate);
+        }
+
+        function normalizeUserText(value, maxLength = MAX_TEXT_LENGTH) {
+            return String(value || '').trim().slice(0, maxLength);
         }
 
         function formatDateInput(input) {
@@ -2718,157 +2722,51 @@
             return dueOccurrences;
         }
 
-        function markPaymentAsPaid(id, occurrenceDateString) {
-            const stored = appStorage.getItem(STORAGE_KEYS.PAYMENTS);
-            let payments = stored ? JSON.parse(stored) : [];
-            const payment = payments.find(item => item.id === id);
-
-            if (!payment) {
-                return;
-            }
-
-            const targetDate = parseDateString(occurrenceDateString);
-            if (!isPaymentDueOnDate(payment, targetDate) || isOccurrencePaid(payment, occurrenceDateString)) {
-                return;
-            }
-
-            const settledAmount = settlePaymentOccurrence(payment, occurrenceDateString);
-            if (settledAmount <= 0) {
-                return;
-            }
-
-            payments = payments.filter(item => !item._delete);
-            appStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
-            recordExpenseEntry({
-                amount: settledAmount,
-                category: 'zaplanowane płatności',
-                date: occurrenceDateString,
-                source: 'planned-payment',
-                name: payment.name || ''
+        async function runServerSettlement(reason) {
+            const response = await fetch('/api/settlements/run', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ reason: normalizeUserText(reason || 'manual') })
             });
-            updateBalanceBy(-settledAmount);
-            loadBalance();
-            loadPayments();
-            updateCalculations();
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                if (response.status === 401) {
+                    handleUnauthorizedSession('Sesja wygasła. Zaloguj się ponownie.');
+                }
+                const error = new Error(`POST /api/settlements/run failed: ${response.status}`);
+                error.status = response.status;
+                error.details = data;
+                throw error;
+            }
+
+            if (data?.state && typeof data.state === 'object') {
+                appState = sanitizeState(data.state);
+            } else {
+                await fetchStateFromServer();
+            }
+            return data;
         }
 
-        function markIncomeAsReceived(id, occurrenceDateString) {
-            const stored = appStorage.getItem(STORAGE_KEYS.INCOMES);
-            let incomes = stored ? JSON.parse(stored) : [];
-            const income = incomes.find(item => item.id === id);
-
-            if (!income) {
-                return;
+        async function markPaymentAsPaid(id, occurrenceDateString) {
+            try {
+                await runServerSettlement(`manual-payment-${id}-${occurrenceDateString}`);
+                loadData();
+            } catch (error) {
+                console.error('Błąd księgowania płatności po stronie serwera:', error);
+                alert('Nie udało się oznaczyć płatności jako opłaconej.');
             }
-
-            const targetDate = parseDateString(occurrenceDateString);
-            if (Number.isNaN(targetDate.getTime())) {
-                return;
-            }
-
-            const today = normalizeDate(new Date());
-            if (targetDate > today) {
-                return;
-            }
-
-            if (!isIncomeDueOnDate(income, targetDate) || isIncomeOccurrenceReceived(income, occurrenceDateString)) {
-                return;
-            }
-
-            const settledAmount = settleIncomeOccurrence(income, occurrenceDateString);
-            if (settledAmount <= 0) {
-                return;
-            }
-
-            incomes = incomes.filter(item => !item._delete);
-            appStorage.setItem(STORAGE_KEYS.INCOMES, JSON.stringify(incomes));
-            recordIncomeEntry({
-                amount: settledAmount,
-                category: 'zaplanowane wpływy',
-                date: occurrenceDateString,
-                source: 'planned-income',
-                name: income.name || ''
-            });
-            updateBalanceBy(settledAmount);
-            loadBalance();
-            loadIncomes();
-            updateCalculations();
         }
 
-        function processDuePaymentsAtNoon() {
-            const now = new Date();
-            const today = normalizeDate(now);
-            const includeTodayOccurrence = now.getHours() >= 12;
-            const stored = appStorage.getItem(STORAGE_KEYS.PAYMENTS);
-            let payments = stored ? JSON.parse(stored) : [];
-            if (payments.length === 0) {
-                return false;
+        async function markIncomeAsReceived(id, occurrenceDateString) {
+            try {
+                await runServerSettlement(`manual-income-${id}-${occurrenceDateString}`);
+                loadData();
+            } catch (error) {
+                console.error('Błąd księgowania wpływu po stronie serwera:', error);
+                alert('Nie udało się oznaczyć wpływu jako zaksięgowanego.');
             }
-
-            let totalSettledAmount = 0;
-            payments.forEach(payment => {
-                const dueOccurrences = getDuePaymentOccurrencesUpToDate(payment, today, includeTodayOccurrence);
-                dueOccurrences.forEach(occurrenceDateString => {
-                    const settledAmount = settlePaymentOccurrence(payment, occurrenceDateString);
-                    if (settledAmount > 0) {
-                        totalSettledAmount += settledAmount;
-                        recordExpenseEntry({
-                            amount: settledAmount,
-                            category: 'zaplanowane płatności',
-                            date: occurrenceDateString,
-                            source: 'planned-payment',
-                            name: payment.name || ''
-                        });
-                    }
-                });
-            });
-
-            if (totalSettledAmount <= 0) {
-                return false;
-            }
-
-            payments = payments.filter(item => !item._delete);
-            appStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
-            updateBalanceBy(-totalSettledAmount);
-            return true;
-        }
-
-        function processDueIncomesAtNoon() {
-            const now = new Date();
-            const today = normalizeDate(now);
-            const includeTodayOccurrence = now.getHours() >= 12;
-            const stored = appStorage.getItem(STORAGE_KEYS.INCOMES);
-            let incomes = stored ? JSON.parse(stored) : [];
-            if (incomes.length === 0) {
-                return false;
-            }
-
-            let totalSettledIncome = 0;
-            incomes.forEach(income => {
-                const dueOccurrences = getDueIncomeOccurrencesUpToDate(income, today, includeTodayOccurrence);
-                dueOccurrences.forEach(occurrenceDateString => {
-                    const settledAmount = settleIncomeOccurrence(income, occurrenceDateString);
-                    if (settledAmount > 0) {
-                        totalSettledIncome += settledAmount;
-                        recordIncomeEntry({
-                            amount: settledAmount,
-                            category: 'zaplanowane wpływy',
-                            date: occurrenceDateString,
-                            source: 'planned-income',
-                            name: income.name || ''
-                        });
-                    }
-                });
-            });
-
-            if (totalSettledIncome <= 0) {
-                return false;
-            }
-
-            incomes = incomes.filter(item => !item._delete);
-            appStorage.setItem(STORAGE_KEYS.INCOMES, JSON.stringify(incomes));
-            updateBalanceBy(totalSettledIncome);
-            return true;
         }
 
         function updateViewMonthLabel() {
@@ -3242,22 +3140,7 @@
         }
 
         function startNoonWatcher() {
-            if (noonWatcherStarted) {
-                return;
-            }
-
-            noonWatcherStarted = true;
-            setInterval(() => {
-                if (document.getElementById('mainApp').classList.contains('hidden')) {
-                    return;
-                }
-
-                const paymentsUpdated = processDuePaymentsAtNoon();
-                const incomesUpdated = processDueIncomesAtNoon();
-                if (paymentsUpdated || incomesUpdated) {
-                    loadData();
-                }
-            }, 60000);
+            return;
         }
 
         function openEditIncome(id) {
@@ -3333,7 +3216,7 @@
         }
 
         function saveIncome() {
-            const name = document.getElementById('incomeName').value.trim();
+            const name = normalizeUserText(document.getElementById('incomeName').value);
             const amount = parseFloat(document.getElementById('incomeAmount').value);
             const rawDate = document.getElementById('incomeDate').value;
             const date = parseUserDateToISO(rawDate);
@@ -3388,7 +3271,7 @@
         }
 
         function savePayment() {
-            const name = document.getElementById('paymentName').value.trim();
+            const name = normalizeUserText(document.getElementById('paymentName').value);
             const amount = parseFloat(document.getElementById('paymentAmount').value);
             const rawDate = document.getElementById('paymentDate').value;
             const date = parseUserDateToISO(rawDate);
@@ -3505,21 +3388,58 @@
                     </div>
                 `;
             } else {
-                listElement.innerHTML = visibleIncomes.map(income => `
-                    <div class="payment-item editable" onclick="openEditIncome(${income.id})" title="Kliknij, aby edytować serię">
-                        <div class="payment-info">
-                            <div class="payment-name">${income.name}</div>
-                            <div class="payment-meta">
-                                <div class="payment-date">${parseDateString(income.date).toLocaleDateString('pl-PL')}</div>
-                                ${income.frequency === 'monthly' ? 
-                                    '<span class="payment-frequency freq-monthly">Co miesiąc</span>' : 
-                                    '<span class="payment-frequency freq-income">Jednorazowy</span>'}
-                            </div>
-                        </div>
-                        <div class="payment-amount income">+${income.amount.toFixed(2)} zł</div>
-                        ${parseDateString(income.date) <= today ? `<button class="paid-btn" onclick="event.stopPropagation(); markIncomeAsReceived(${income.id}, '${income.date}')">Zaksięgowano</button>` : ''}
-                    </div>
-                `).join('');
+                listElement.textContent = '';
+                visibleIncomes.forEach(income => {
+                    const row = document.createElement('div');
+                    row.className = 'payment-item editable';
+                    row.title = 'Kliknij, aby edytować serię';
+                    row.addEventListener('click', () => openEditIncome(income.id));
+
+                    const info = document.createElement('div');
+                    info.className = 'payment-info';
+
+                    const name = document.createElement('div');
+                    name.className = 'payment-name';
+                    name.textContent = normalizeUserText(income.name);
+                    info.appendChild(name);
+
+                    const meta = document.createElement('div');
+                    meta.className = 'payment-meta';
+
+                    const dateNode = document.createElement('div');
+                    dateNode.className = 'payment-date';
+                    dateNode.textContent = parseDateString(income.date).toLocaleDateString('pl-PL');
+                    meta.appendChild(dateNode);
+
+                    const freq = document.createElement('span');
+                    freq.className = income.frequency === 'monthly'
+                        ? 'payment-frequency freq-monthly'
+                        : 'payment-frequency freq-income';
+                    freq.textContent = income.frequency === 'monthly' ? 'Co miesiąc' : 'Jednorazowy';
+                    meta.appendChild(freq);
+
+                    info.appendChild(meta);
+                    row.appendChild(info);
+
+                    const amount = document.createElement('div');
+                    amount.className = 'payment-amount income';
+                    amount.textContent = `+${Number(income.amount || 0).toFixed(2)} zł`;
+                    row.appendChild(amount);
+
+                    if (parseDateString(income.date) <= today) {
+                        const paidBtn = document.createElement('button');
+                        paidBtn.className = 'paid-btn';
+                        paidBtn.type = 'button';
+                        paidBtn.textContent = 'Zaksięgowano';
+                        paidBtn.addEventListener('click', event => {
+                            event.stopPropagation();
+                            markIncomeAsReceived(income.id, income.date);
+                        });
+                        row.appendChild(paidBtn);
+                    }
+
+                    listElement.appendChild(row);
+                });
             }
 
             // Update next income countdown
@@ -3571,23 +3491,60 @@
                 return;
             }
 
-            listElement.innerHTML = visiblePayments.map(payment => `
-                <div class="payment-item editable" onclick="openEditPayment(${payment.id})" title="Kliknij, aby edytować serię">
-                    <div class="payment-info">
-                        <div class="payment-name">${payment.name}</div>
-                        <div class="payment-meta">
-                            <div class="payment-date">${parseDateString(payment.date).toLocaleDateString('pl-PL')}</div>
-                            ${payment.frequency === 'monthly' ? 
-                                '<span class="payment-frequency freq-monthly">Co miesiąc</span>' : 
-                                payment.frequency === 'selected' ?
-                                '<span class="payment-frequency freq-selected">Wybrane miesiące</span>' :
-                                ''}
-                        </div>
-                    </div>
-                    <div class="payment-amount expense">-${payment.amount.toFixed(2)} zł</div>
-                    ${parseDateString(payment.date) <= today ? `<button class="paid-btn" onclick="event.stopPropagation(); markPaymentAsPaid(${payment.id}, '${payment.date}')">Opłacone</button>` : ''}
-                </div>
-            `).join('');
+            listElement.textContent = '';
+            visiblePayments.forEach(payment => {
+                const row = document.createElement('div');
+                row.className = 'payment-item editable';
+                row.title = 'Kliknij, aby edytować serię';
+                row.addEventListener('click', () => openEditPayment(payment.id));
+
+                const info = document.createElement('div');
+                info.className = 'payment-info';
+
+                const name = document.createElement('div');
+                name.className = 'payment-name';
+                name.textContent = normalizeUserText(payment.name);
+                info.appendChild(name);
+
+                const meta = document.createElement('div');
+                meta.className = 'payment-meta';
+
+                const dateNode = document.createElement('div');
+                dateNode.className = 'payment-date';
+                dateNode.textContent = parseDateString(payment.date).toLocaleDateString('pl-PL');
+                meta.appendChild(dateNode);
+
+                if (payment.frequency === 'monthly' || payment.frequency === 'selected') {
+                    const freq = document.createElement('span');
+                    freq.className = payment.frequency === 'monthly'
+                        ? 'payment-frequency freq-monthly'
+                        : 'payment-frequency freq-selected';
+                    freq.textContent = payment.frequency === 'monthly' ? 'Co miesiąc' : 'Wybrane miesiące';
+                    meta.appendChild(freq);
+                }
+
+                info.appendChild(meta);
+                row.appendChild(info);
+
+                const amount = document.createElement('div');
+                amount.className = 'payment-amount expense';
+                amount.textContent = `-${Number(payment.amount || 0).toFixed(2)} zł`;
+                row.appendChild(amount);
+
+                if (parseDateString(payment.date) <= today) {
+                    const paidBtn = document.createElement('button');
+                    paidBtn.className = 'paid-btn';
+                    paidBtn.type = 'button';
+                    paidBtn.textContent = 'Opłacone';
+                    paidBtn.addEventListener('click', event => {
+                        event.stopPropagation();
+                        markPaymentAsPaid(payment.id, payment.date);
+                    });
+                    row.appendChild(paidBtn);
+                }
+
+                listElement.appendChild(row);
+            });
         }
 
         function deletePayment(id) {
