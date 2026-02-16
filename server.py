@@ -18,6 +18,24 @@ from urllib.parse import parse_qs, urlparse
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 
+def env_flag(name, default=False):
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return bool(default)
+    return str(raw_value).strip().lower() in ("1", "true", "yes", "on")
+
+
+def env_int(name, default, minimum):
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return max(minimum, int(default))
+    try:
+        parsed = int(str(raw_value).strip())
+    except (TypeError, ValueError):
+        parsed = int(default)
+    return max(minimum, parsed)
+
+
 DEFAULT_STATE = {
     "pin": "1234",
     "version": 1,
@@ -43,8 +61,8 @@ PIN_SCRYPT_PARAMS = {
     "p": 1,
     "dklen": 64,
 }
-BACKUP_INTERVAL_SECONDS = 24 * 60 * 60
-BACKUP_RETENTION_COUNT = 14
+BACKUP_INTERVAL_SECONDS = env_int("BACKUP_INTERVAL_SECONDS", 24 * 60 * 60, 300)
+BACKUP_RETENTION_COUNT = env_int("BACKUP_RETENTION_COUNT", 14, 1)
 
 
 class StateConflictError(Exception):
@@ -139,6 +157,88 @@ def parse_iso_datetime(raw_value):
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def path_is_within(child_path, parent_path):
+    try:
+        child_path.resolve().relative_to(parent_path.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def is_mount_point(path_value):
+    path_text = str(path_value)
+    try:
+        with open("/proc/mounts", "r", encoding="utf-8") as mounts_file:
+            for line in mounts_file:
+                parts = line.split()
+                if len(parts) >= 2 and parts[1] == path_text:
+                    return True
+    except OSError:
+        return False
+    return False
+
+
+def running_on_railway():
+    return bool(str(os.getenv("RAILWAY_PROJECT_ID", "")).strip())
+
+
+def get_required_persistent_mount():
+    return Path(str(os.getenv("PERSISTENT_MOUNT_PATH", "/data")).strip() or "/data")
+
+
+def storage_guard_enabled():
+    if not running_on_railway():
+        return False
+    if env_flag("ALLOW_EPHEMERAL_DB", False):
+        return False
+    return env_flag("REQUIRE_PERSISTENT_STORAGE", True)
+
+
+def enforce_storage_guard():
+    if not storage_guard_enabled():
+        return
+
+    required_mount = get_required_persistent_mount().resolve()
+    resolved_db = DB_PATH.resolve()
+
+    if not path_is_within(resolved_db, required_mount):
+        raise RuntimeError(
+            "Unsafe DB_PATH on Railway. "
+            f"DB_PATH={resolved_db} must be inside {required_mount}. "
+            "Set DB_PATH under persistent mount or set ALLOW_EPHEMERAL_DB=1 to bypass."
+        )
+
+    if not is_mount_point(required_mount):
+        raise RuntimeError(
+            "Persistent volume is not mounted. "
+            f"Expected mount at {required_mount}. "
+            "Attach Railway volume before starting the app."
+        )
+
+
+def get_storage_status():
+    required_mount = get_required_persistent_mount()
+    resolved_db = DB_PATH.resolve()
+    backup_dir = get_backup_dir().resolve()
+    mount_resolved = required_mount.resolve()
+    mounted = is_mount_point(mount_resolved)
+    db_on_required_mount = path_is_within(resolved_db, mount_resolved)
+    guard_on = storage_guard_enabled()
+    safe = (not guard_on) or (mounted and db_on_required_mount)
+
+    return {
+        "railway": running_on_railway(),
+        "guardEnabled": guard_on,
+        "allowEphemeralDb": env_flag("ALLOW_EPHEMERAL_DB", False),
+        "dbPath": str(resolved_db),
+        "backupDir": str(backup_dir),
+        "requiredMountPath": str(mount_resolved),
+        "requiredMountPresent": mounted,
+        "dbOnRequiredMount": db_on_required_mount,
+        "safe": safe,
+    }
 
 
 def is_valid_pin(pin):
@@ -1080,6 +1180,19 @@ class BudgetRequestHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _send_bytes(self, status_code, raw_bytes, content_type, filename):
+        data = raw_bytes if isinstance(raw_bytes, (bytes, bytearray)) else bytes(raw_bytes)
+        self.send_response(status_code)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        if filename:
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def _parse_json_body(self):
         content_length = int(self.headers.get("Content-Length", "0"))
         raw_body = self.rfile.read(content_length) if content_length > 0 else b"{}"
@@ -1209,6 +1322,52 @@ class BudgetRequestHandler(SimpleHTTPRequestHandler):
     def _handle_auth_status(self):
         self._send_json(200, {"authenticated": self._is_authenticated()})
 
+    def _handle_storage_status_get(self):
+        if not self._is_authenticated():
+            self._send_json(401, {"error": "unauthorized"})
+            return
+        self._send_json(200, get_storage_status())
+
+    def _handle_backup_download(self, parsed):
+        if not self._is_authenticated():
+            self._send_json(401, {"error": "unauthorized"})
+            return
+
+        query = parse_qs(parsed.query or "")
+        backup_format = str(query.get("format", ["sqlite"])[0]).strip().lower()
+        timestamp = utcnow().strftime("%Y%m%d_%H%M%S")
+
+        if backup_format == "sqlite":
+            backup_path = create_db_backup()
+            if not backup_path or not backup_path.exists():
+                self._send_json(500, {"error": "backup_failed"})
+                return
+            self._send_bytes(
+                200,
+                backup_path.read_bytes(),
+                "application/x-sqlite3",
+                backup_path.name,
+            )
+            return
+
+        if backup_format == "json":
+            state = read_state()
+            state.pop("pin", None)
+            payload = {
+                "createdAt": isoformat_utc(utcnow()),
+                "state": state,
+                "storage": get_storage_status(),
+            }
+            self._send_bytes(
+                200,
+                json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"),
+                "application/json; charset=utf-8",
+                f"budget_state_{timestamp}.json",
+            )
+            return
+
+        self._send_json(400, {"error": "invalid_backup_format"})
+
     def _handle_auth_login(self):
         payload = self._parse_json_body()
         if payload is None:
@@ -1301,6 +1460,12 @@ class BudgetRequestHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/state":
             self._handle_state_get()
             return
+        if parsed.path == "/api/storage/status":
+            self._handle_storage_status_get()
+            return
+        if parsed.path == "/api/backup/download":
+            self._handle_backup_download(parsed)
+            return
         if parsed.path == "/api/transactions":
             self._handle_transactions_get(parsed)
             return
@@ -1354,6 +1519,18 @@ def main():
     DB_PATH = Path(args.db)
     if DB_PATH.parent and str(DB_PATH.parent) not in ("", "."):
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    enforce_storage_guard()
+
+    storage_status = get_storage_status()
+    print(
+        "[storage] "
+        f"safe={storage_status['safe']} "
+        f"db={storage_status['dbPath']} "
+        f"backupDir={storage_status['backupDir']} "
+        f"requiredMount={storage_status['requiredMountPath']} "
+        f"mountPresent={storage_status['requiredMountPresent']}"
+    )
+
     init_db()
     startup_backup = create_db_backup()
     if startup_backup:
