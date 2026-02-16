@@ -73,6 +73,7 @@ PIN_SCRYPT_PARAMS = {
 }
 BACKUP_INTERVAL_SECONDS = env_int("BACKUP_INTERVAL_SECONDS", 24 * 60 * 60, 300)
 BACKUP_RETENTION_COUNT = env_int("BACKUP_RETENTION_COUNT", 14, 1)
+MAX_BACKUP_UPLOAD_BYTES = env_int("MAX_BACKUP_UPLOAD_BYTES", 25 * 1024 * 1024, 1024 * 1024)
 STATIC_FILE_WHITELIST = {
     "/": "budget-app.html",
     "/budget-app.html": "budget-app.html",
@@ -968,6 +969,16 @@ def delete_session_token(raw_token):
             conn.close()
 
 
+def delete_all_sessions():
+    with DB_LOCK:
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            conn.execute("DELETE FROM auth_sessions")
+            conn.commit()
+        finally:
+            conn.close()
+
+
 def get_month_occurrence_date(base_date, year, month):
     if month == 12:
         next_month = date(year + 1, 1, 1)
@@ -1649,6 +1660,105 @@ def create_db_backup():
         return None
 
 
+def validate_sqlite_backup_file(db_file_path):
+    try:
+        with open(db_file_path, "rb") as handle:
+            header = handle.read(16)
+    except OSError as exc:
+        raise ValueError("backup_read_failed") from exc
+
+    if header != b"SQLite format 3\x00":
+        raise ValueError("invalid_sqlite_header")
+
+    try:
+        conn = sqlite3.connect(db_file_path)
+        try:
+            quick_check_rows = conn.execute("PRAGMA quick_check").fetchall()
+            if not quick_check_rows or quick_check_rows[0][0] != "ok":
+                raise ValueError("sqlite_integrity_failed")
+
+            app_state_row = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_state'"
+            ).fetchone()
+            if app_state_row is None:
+                raise ValueError("missing_app_state_table")
+
+            required_app_state_columns = {"id", "pin", "balance", "payments", "incomes"}
+            app_state_columns = {
+                str(row[1] or "")
+                for row in conn.execute("PRAGMA table_info(app_state)").fetchall()
+            }
+            if not required_app_state_columns.issubset(app_state_columns):
+                raise ValueError("missing_required_columns")
+
+            root_state_row = conn.execute(
+                "SELECT id FROM app_state WHERE id = 1"
+            ).fetchone()
+            if root_state_row is None:
+                raise ValueError("missing_primary_state_row")
+
+            legacy_pin_row = conn.execute("SELECT pin FROM app_state WHERE id = 1").fetchone()
+            legacy_pin = normalize_pin(legacy_pin_row[0]) if legacy_pin_row else ""
+            has_legacy_pin = is_valid_pin(legacy_pin)
+
+            auth_meta_table_row = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'auth_meta'"
+            ).fetchone()
+            has_auth_meta = auth_meta_table_row is not None
+
+            has_auth_meta_row = False
+            if has_auth_meta:
+                auth_pin_row = conn.execute(
+                    "SELECT id FROM auth_meta WHERE id = 1"
+                ).fetchone()
+                has_auth_meta_row = auth_pin_row is not None
+
+            if not has_auth_meta_row and not has_legacy_pin:
+                raise ValueError("missing_auth_pin_data")
+        finally:
+            conn.close()
+    except sqlite3.Error as exc:
+        raise ValueError("invalid_sqlite_file") from exc
+
+
+def restore_db_from_backup_bytes(raw_bytes):
+    payload = bytes(raw_bytes) if isinstance(raw_bytes, (bytes, bytearray)) else b""
+    if not payload:
+        raise ValueError("empty_backup_payload")
+
+    if len(payload) > MAX_BACKUP_UPLOAD_BYTES:
+        raise ValueError("backup_too_large")
+
+    db_dir = DB_PATH.resolve().parent
+    db_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = utcnow().strftime("%Y%m%d_%H%M%S")
+    temp_restore_path = db_dir / f".restore_upload_{timestamp}_{secrets.token_hex(6)}.db"
+
+    try:
+        with open(temp_restore_path, "wb") as handle:
+            handle.write(payload)
+
+        validate_sqlite_backup_file(temp_restore_path)
+
+        pre_restore_backup = create_db_backup()
+        if not pre_restore_backup or not pre_restore_backup.exists():
+            raise RuntimeError("pre_restore_backup_failed")
+
+        with DB_LOCK:
+            os.replace(temp_restore_path, DB_PATH)
+
+        init_db()
+        delete_all_sessions()
+        return pre_restore_backup
+    finally:
+        try:
+            if temp_restore_path.exists():
+                temp_restore_path.unlink()
+        except OSError:
+            pass
+
+
 def start_backup_scheduler():
     def worker():
         while True:
@@ -2294,38 +2404,75 @@ class BudgetRequestHandler(SimpleHTTPRequestHandler):
 
         query = parse_qs(parsed.query or "")
         backup_format = str(query.get("format", ["sqlite"])[0]).strip().lower()
-        timestamp = utcnow().strftime("%Y%m%d_%H%M%S")
-
-        if backup_format == "sqlite":
-            backup_path = create_db_backup()
-            if not backup_path or not backup_path.exists():
-                self._send_json(500, {"error": "backup_failed"})
-                return
-            self._send_bytes(
-                200,
-                backup_path.read_bytes(),
-                "application/x-sqlite3",
-                backup_path.name,
-            )
+        if backup_format not in ("", "sqlite"):
+            self._send_json(400, {"error": "invalid_backup_format"})
             return
 
-        if backup_format == "json":
-            state = read_state()
-            state.pop("pin", None)
-            payload = {
-                "createdAt": isoformat_utc(utcnow()),
-                "state": state,
-                "storage": get_storage_status(),
-            }
-            self._send_bytes(
-                200,
-                json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"),
-                "application/json; charset=utf-8",
-                f"budget_state_{timestamp}.json",
-            )
+        backup_path = create_db_backup()
+        if not backup_path or not backup_path.exists():
+            self._send_json(500, {"error": "backup_failed"})
             return
 
-        self._send_json(400, {"error": "invalid_backup_format"})
+        self._send_bytes(
+            200,
+            backup_path.read_bytes(),
+            "application/x-sqlite3",
+            backup_path.name,
+        )
+
+    def _handle_backup_restore(self):
+        if not self._is_authenticated():
+            self._send_json(401, {"error": "unauthorized"})
+            return
+
+        raw_content_type = str(self.headers.get("Content-Type", "")).strip().lower()
+        content_type = raw_content_type.split(";", 1)[0].strip()
+        if content_type not in ("application/x-sqlite3", "application/octet-stream"):
+            self._send_json(400, {"error": "unsupported_content_type"})
+            return
+
+        raw_length = self.headers.get("Content-Length", "0")
+        try:
+            content_length = int(str(raw_length).strip())
+        except (TypeError, ValueError):
+            self._send_json(400, {"error": "invalid_content_length"})
+            return
+
+        if content_length <= 0:
+            self._send_json(400, {"error": "empty_backup_payload"})
+            return
+        if content_length > MAX_BACKUP_UPLOAD_BYTES:
+            self._send_json(413, {"error": "backup_too_large"})
+            return
+
+        raw_body = self.rfile.read(content_length)
+        if len(raw_body) != content_length:
+            self._send_json(400, {"error": "invalid_request_body"})
+            return
+
+        try:
+            pre_restore_backup = restore_db_from_backup_bytes(raw_body)
+        except ValueError as exc:
+            error_code = str(exc)
+            status_code = 413 if error_code == "backup_too_large" else 422
+            self._send_json(status_code, {"error": error_code})
+            return
+        except RuntimeError as exc:
+            self._send_json(500, {"error": str(exc)})
+            return
+        except Exception as exc:
+            print(f"[backup] restore failed: {exc}")
+            self._send_json(500, {"error": "restore_failed"})
+            return
+
+        self._send_json(
+            200,
+            {
+                "ok": True,
+                "preRestoreBackup": pre_restore_backup.name,
+            },
+            extra_headers=[("Set-Cookie", self._clear_session_cookie_header())],
+        )
 
     def _handle_auth_login(self):
         payload = self._parse_json_body()
@@ -2441,6 +2588,9 @@ class BudgetRequestHandler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/settlements/run":
             self._handle_settlements_run()
+            return
+        if parsed.path == "/api/backup/restore":
+            self._handle_backup_restore()
             return
         if parsed.path == "/api/auth/login":
             self._handle_auth_login()

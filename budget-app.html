@@ -648,9 +648,23 @@
             flex-wrap: wrap;
         }
 
+        .backup-restore-actions {
+            margin-top: 10px;
+        }
+
         .backup-actions .btn {
             flex: 1;
             min-width: 180px;
+        }
+
+        .backup-actions input[type="file"] {
+            flex: 2;
+            min-width: 220px;
+            padding: 10px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-secondary);
         }
 
         .empty-state {
@@ -1324,10 +1338,13 @@
 
             <div class="input-group">
                 <label>Kopia zapasowa danych</label>
-                <p class="backup-hint">Pobierz backup poza Railway, aby mieć dodatkowe zabezpieczenie niezależne od serwera.</p>
+                <p class="backup-hint">Używamy jednego formatu backupu: SQLite <code>.db</code>. Pobierz kopię lokalnie i możesz ją później przywrócić.</p>
                 <div class="backup-actions">
-                    <button class="btn btn-secondary" onclick="downloadBackup('sqlite')">Pobierz backup .db</button>
-                    <button class="btn btn-secondary" onclick="downloadBackup('json')">Pobierz backup JSON</button>
+                    <button class="btn btn-secondary" onclick="downloadBackup()">Pobierz backup .db</button>
+                </div>
+                <div class="backup-actions backup-restore-actions">
+                    <input type="file" id="backupFileInput" accept=".db,application/x-sqlite3" />
+                    <button class="btn btn-secondary" onclick="restoreBackup()">Przywróć backup .db</button>
                 </div>
             </div>
         </div>
@@ -2152,6 +2169,7 @@
             document.getElementById('currentPin').value = '';
             document.getElementById('newPin').value = '';
             document.getElementById('confirmPin').value = '';
+            document.getElementById('backupFileInput').value = '';
             document.getElementById('adminError').style.display = 'none';
             document.getElementById('adminSuccess').textContent = ADMIN_SUCCESS_DEFAULT_MESSAGE;
             document.getElementById('adminSuccess').style.display = 'none';
@@ -3645,16 +3663,14 @@
             }
         }
 
-        async function downloadBackup(format) {
+        async function downloadBackup() {
             const errorElement = document.getElementById('adminError');
             const successElement = document.getElementById('adminSuccess');
             errorElement.style.display = 'none';
             successElement.style.display = 'none';
 
-            const selectedFormat = format === 'json' ? 'json' : 'sqlite';
-
             try {
-                const response = await fetch(`/api/backup/download?format=${encodeURIComponent(selectedFormat)}`, {
+                const response = await fetch('/api/backup/download?format=sqlite', {
                     method: 'GET',
                     headers: { 'Accept': 'application/octet-stream' },
                     credentials: 'same-origin'
@@ -3674,9 +3690,7 @@
                 const blob = await response.blob();
                 const contentDisposition = response.headers.get('Content-Disposition') || '';
                 const filenameMatch = contentDisposition.match(/filename="([^"]+)"/i);
-                const defaultName = selectedFormat === 'json'
-                    ? `budget_state_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`
-                    : `budget_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.db`;
+                const defaultName = `budget_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.db`;
                 const filename = filenameMatch && filenameMatch[1] ? filenameMatch[1] : defaultName;
 
                 const objectUrl = URL.createObjectURL(blob);
@@ -3688,12 +3702,88 @@
                 anchor.remove();
                 URL.revokeObjectURL(objectUrl);
 
-                successElement.textContent = selectedFormat === 'json'
-                    ? 'Backup JSON został pobrany.'
-                    : 'Backup bazy .db został pobrany.';
+                successElement.textContent = 'Backup bazy .db został pobrany.';
                 successElement.style.display = 'block';
             } catch (error) {
                 console.error('Błąd pobierania backupu:', error);
+                errorElement.textContent = 'Błąd połączenia z serwerem.';
+                errorElement.style.display = 'block';
+            }
+        }
+
+        async function restoreBackup() {
+            const errorElement = document.getElementById('adminError');
+            const successElement = document.getElementById('adminSuccess');
+            const fileInput = document.getElementById('backupFileInput');
+            const selectedFile = fileInput?.files?.[0];
+
+            errorElement.style.display = 'none';
+            successElement.style.display = 'none';
+
+            if (!selectedFile) {
+                errorElement.textContent = 'Wybierz plik backupu .db';
+                errorElement.style.display = 'block';
+                return;
+            }
+
+            const fileName = String(selectedFile.name || '').toLowerCase();
+            if (!fileName.endsWith('.db')) {
+                errorElement.textContent = 'Do przywracania wybierz plik SQLite .db';
+                errorElement.style.display = 'block';
+                return;
+            }
+
+            const shouldProceed = window.confirm(
+                'Przywrócenie backupu zastąpi aktualne dane. Przed operacją serwer utworzy snapshot bezpieczeństwa. Kontynuować?'
+            );
+            if (!shouldProceed) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/backup/restore', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-sqlite3'
+                    },
+                    credentials: 'same-origin',
+                    body: selectedFile
+                });
+                const data = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        errorElement.textContent = 'Sesja wygasła. Zaloguj się ponownie.';
+                        handleUnauthorizedSession();
+                    } else if (response.status === 413 || data?.error === 'backup_too_large') {
+                        errorElement.textContent = 'Plik backupu jest za duży.';
+                    } else if (response.status === 422) {
+                        errorElement.textContent = 'Plik backupu jest nieprawidłowy lub niekompatybilny.';
+                    } else {
+                        errorElement.textContent = 'Nie udało się przywrócić backupu.';
+                    }
+                    errorElement.style.display = 'block';
+                    return;
+                }
+
+                const snapshotName = data?.preRestoreBackup ? ` Snapshot: ${data.preRestoreBackup}` : '';
+                successElement.textContent = `Backup został przywrócony.${snapshotName} Zaloguj się ponownie.`;
+                successElement.style.display = 'block';
+
+                isAuthenticated = false;
+                stateReady = false;
+                savePending = false;
+                if (saveTimerId) {
+                    clearTimeout(saveTimerId);
+                    saveTimerId = null;
+                }
+                appState = sanitizeState({});
+                setTimeout(() => {
+                    closeAdminPanel();
+                    showLoginScreen();
+                }, 500);
+            } catch (error) {
+                console.error('Błąd przywracania backupu:', error);
                 errorElement.textContent = 'Błąd połączenia z serwerem.';
                 errorElement.style.display = 'block';
             }

@@ -68,10 +68,10 @@ cp /data/backups/budget_YYYYMMDD_HHMMSS.db /data/budget.db
 Manual download (new, requires logged-in session):
 - SQLite backup file:
   - `GET /api/backup/download?format=sqlite`
-- JSON state snapshot:
-  - `GET /api/backup/download?format=json`
+- Restore from uploaded SQLite file:
+  - `POST /api/backup/restore` (`Content-Type: application/x-sqlite3`)
 
-You can also download both from the Admin panel in the app UI.
+You can download and restore `.db` backup from the Admin panel in the app UI.
 
 ## One-time cleanup (keep PIN, remove state)
 ```powershell
