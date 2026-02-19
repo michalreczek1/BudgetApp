@@ -1188,6 +1188,25 @@
         </div>
     </div>
 
+    <div class="modal" id="expenseEditModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>✏️ Edytuj wydatek</h2>
+                <button class="close-btn" onclick="closeExpenseEditModal()">✕</button>
+            </div>
+
+            <div class="input-group">
+                <label>Kwota wydatku (zł)</label>
+                <input type="number" id="expenseEditAmountInput" placeholder="0.00" step="0.01">
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeExpenseEditModal()">Anuluj</button>
+                <button class="btn btn-primary" onclick="saveExpenseAmountFromAnalysis()">Zapisz</button>
+            </div>
+        </div>
+    </div>
+
     <div class="modal" id="incomeAnalysisModal">
         <div class="modal-content">
             <div class="modal-header">
@@ -1397,6 +1416,7 @@
         let selectedMonths = [];
         let editingIncomeId = null;
         let editingPaymentId = null;
+        let editingExpenseEntryId = null;
         let selectedBalanceCategory = null;
         let pendingBalanceCategoryChange = null;
         let expenseDetailsVisible = false;
@@ -2833,15 +2853,22 @@
         function openExpenseAnalysisModal() {
             const monthInput = document.getElementById('expenseAnalysisMonth');
             monthInput.value = getMonthInputValue(currentViewDate);
-            expenseDetailsVisible = false;
-            document.getElementById('expenseDetailsSection').classList.add('hidden');
-            document.getElementById('expenseDetailsBtn').textContent = 'Szczegóły';
+            expenseDetailsVisible = true;
+            document.getElementById('expenseDetailsSection').classList.remove('hidden');
+            document.getElementById('expenseDetailsBtn').textContent = 'Ukryj szczegóły';
             renderExpenseAnalysis();
             document.getElementById('expenseAnalysisModal').classList.add('active');
         }
 
         function closeExpenseAnalysisModal() {
             document.getElementById('expenseAnalysisModal').classList.remove('active');
+            closeExpenseEditModal();
+        }
+
+        function closeExpenseEditModal() {
+            document.getElementById('expenseEditModal').classList.remove('active');
+            editingExpenseEntryId = null;
+            document.getElementById('expenseEditAmountInput').value = '';
         }
 
         function openIncomeAnalysisModal() {
@@ -2925,11 +2952,21 @@
             }
 
             const currentAmount = roundCurrency(Number(entries[entryIndex].amount) || 0);
-            const rawValue = prompt('Podaj nową kwotę wydatku (zł):', currentAmount.toFixed(2));
-            if (rawValue === null) {
+            editingExpenseEntryId = normalizedId;
+            const amountInput = document.getElementById('expenseEditAmountInput');
+            amountInput.value = currentAmount.toFixed(2);
+            document.getElementById('expenseEditModal').classList.add('active');
+            amountInput.focus();
+            amountInput.select();
+        }
+
+        async function saveExpenseAmountFromAnalysis() {
+            if (!Number.isInteger(editingExpenseEntryId) || editingExpenseEntryId <= 0) {
+                alert('Nie wybrano wydatku do edycji.');
                 return;
             }
 
+            const rawValue = document.getElementById('expenseEditAmountInput').value;
             const parsedAmount = Number(String(rawValue).replace(',', '.').trim());
             const newAmount = roundCurrency(parsedAmount);
             if (!Number.isFinite(newAmount) || newAmount <= 0) {
@@ -2937,7 +2974,18 @@
                 return;
             }
 
+            const entries = parseStoredJSON(STORAGE_KEYS.EXPENSE_ENTRIES, []);
+            const entryIndex = entries.findIndex(entry => Number(entry.id) === editingExpenseEntryId);
+            if (entryIndex === -1) {
+                closeExpenseEditModal();
+                alert('Nie znaleziono wydatku. Odśwież analizę i spróbuj ponownie.');
+                await renderExpenseAnalysis();
+                return;
+            }
+
+            const currentAmount = roundCurrency(Number(entries[entryIndex].amount) || 0);
             if (newAmount === currentAmount) {
+                closeExpenseEditModal();
                 return;
             }
 
@@ -2953,6 +3001,7 @@
             const updatedBalance = roundCurrency(currentBalance + currentAmount - newAmount);
             appStorage.setItem(STORAGE_KEYS.BALANCE, updatedBalance.toString());
 
+            closeExpenseEditModal();
             loadBalance();
             updateCalculations();
 
