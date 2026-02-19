@@ -501,6 +501,44 @@
             color: var(--text-secondary);
         }
 
+        .mobile-action-dock {
+            display: none;
+        }
+
+        .dock-btn {
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            border-radius: 14px;
+            min-height: 64px;
+            padding: 10px 8px;
+            color: #ecf2ff;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 700;
+            letter-spacing: 0.2px;
+            line-height: 1.2;
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.2s ease, filter 0.2s ease, border-color 0.2s ease;
+        }
+
+        .dock-btn:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.08);
+            border-color: rgba(255, 255, 255, 0.28);
+        }
+
+        .dock-btn-balance {
+            background: linear-gradient(145deg, #1a3f73, #132d57);
+        }
+
+        .dock-btn-income {
+            background: linear-gradient(145deg, #116356, #0d4b41);
+        }
+
+        .dock-btn-payment {
+            background: linear-gradient(145deg, #4f428f, #3d3270);
+        }
+
         /* Modal */
         .modal {
             display: none;
@@ -965,7 +1003,32 @@
             }
 
             body {
-                padding-bottom: 84px;
+                padding-bottom: 132px;
+            }
+
+            .action-buttons {
+                display: none;
+            }
+
+            .mobile-action-dock {
+                position: fixed;
+                left: 12px;
+                right: 12px;
+                bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+                z-index: 950;
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 8px;
+                padding: 8px;
+                background: rgba(11, 17, 30, 0.88);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 18px;
+                backdrop-filter: blur(10px);
+                box-shadow: 0 12px 34px rgba(0, 0, 0, 0.35);
+            }
+
+            .install-app-btn {
+                bottom: calc(env(safe-area-inset-bottom, 0px) + 92px);
             }
         }
 
@@ -1114,6 +1177,12 @@
                     <p>Zaplanuj wydatek</p>
                 </div>
             </div>
+        </div>
+
+        <div class="mobile-action-dock">
+            <button type="button" class="dock-btn dock-btn-balance" onclick="openBalanceModal()">💳 Aktualizuj stan</button>
+            <button type="button" class="dock-btn dock-btn-income" onclick="openIncomeModal()">💵 Dodaj wpływ</button>
+            <button type="button" class="dock-btn dock-btn-payment" onclick="openPaymentModal()">➕ Dodaj płatność</button>
         </div>
     </div>
 
