@@ -2853,9 +2853,9 @@
         function openExpenseAnalysisModal() {
             const monthInput = document.getElementById('expenseAnalysisMonth');
             monthInput.value = getMonthInputValue(currentViewDate);
-            expenseDetailsVisible = true;
-            document.getElementById('expenseDetailsSection').classList.remove('hidden');
-            document.getElementById('expenseDetailsBtn').textContent = 'Ukryj szczegóły';
+            expenseDetailsVisible = false;
+            document.getElementById('expenseDetailsSection').classList.add('hidden');
+            document.getElementById('expenseDetailsBtn').textContent = 'Szczegóły';
             renderExpenseAnalysis();
             document.getElementById('expenseAnalysisModal').classList.add('active');
         }
