@@ -825,6 +825,16 @@
             font-size: 0.9rem;
         }
 
+        .analysis-entry-editable {
+            cursor: pointer;
+            transition: border-color 0.2s ease, background-color 0.2s ease;
+        }
+
+        .analysis-entry-editable:hover {
+            border-color: rgba(74, 158, 255, 0.45);
+            background: rgba(74, 158, 255, 0.1);
+        }
+
         .analysis-entry-meta {
             color: var(--text-secondary);
             font-size: 0.82rem;
@@ -2899,6 +2909,59 @@
             renderExpenseAnalysis();
         }
 
+        async function editExpenseAmountFromAnalysis(entryId) {
+            const normalizedId = Number(entryId);
+            if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
+                alert('Nie udało się odczytać identyfikatora wydatku.');
+                return;
+            }
+
+            const entries = parseStoredJSON(STORAGE_KEYS.EXPENSE_ENTRIES, []);
+            const entryIndex = entries.findIndex(entry => Number(entry.id) === normalizedId);
+            if (entryIndex === -1) {
+                alert('Nie znaleziono wydatku. Odśwież analizę i spróbuj ponownie.');
+                await renderExpenseAnalysis();
+                return;
+            }
+
+            const currentAmount = roundCurrency(Number(entries[entryIndex].amount) || 0);
+            const rawValue = prompt('Podaj nową kwotę wydatku (zł):', currentAmount.toFixed(2));
+            if (rawValue === null) {
+                return;
+            }
+
+            const parsedAmount = Number(String(rawValue).replace(',', '.').trim());
+            const newAmount = roundCurrency(parsedAmount);
+            if (!Number.isFinite(newAmount) || newAmount <= 0) {
+                alert('Podaj poprawną kwotę większą od zera.');
+                return;
+            }
+
+            if (newAmount === currentAmount) {
+                return;
+            }
+
+            entries[entryIndex] = {
+                ...entries[entryIndex],
+                amount: newAmount
+            };
+
+            appStorage.setItem(STORAGE_KEYS.EXPENSE_ENTRIES, JSON.stringify(entries));
+            appStorage.setItem(STORAGE_KEYS.EXPENSE_TOTALS, JSON.stringify(buildCategoryTotals(entries)));
+
+            const currentBalance = parseFloat(appStorage.getItem(STORAGE_KEYS.BALANCE)) || 0;
+            const updatedBalance = roundCurrency(currentBalance + currentAmount - newAmount);
+            appStorage.setItem(STORAGE_KEYS.BALANCE, updatedBalance.toString());
+
+            loadBalance();
+            updateCalculations();
+
+            await flushStateSave();
+            if (document.getElementById('expenseAnalysisModal').classList.contains('active')) {
+                await renderExpenseAnalysis();
+            }
+        }
+
         async function renderExpenseAnalysis() {
             const requestId = ++expenseAnalysisRequestId;
             const monthValue = document.getElementById('expenseAnalysisMonth').value;
@@ -3031,7 +3094,13 @@
                         </div>
                         <div class="analysis-entry-list">
                             ${categoryEntries.map(entry => `
-                                <div class="analysis-entry">
+                                <div
+                                    class="analysis-entry analysis-entry-editable"
+                                    role="button"
+                                    tabindex="0"
+                                    onclick="editExpenseAmountFromAnalysis(${Number(entry.id)})"
+                                    onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); editExpenseAmountFromAnalysis(${Number(entry.id)}); }"
+                                >
                                     <div>${formatEntryDate(entry.date)}</div>
                                     <div class="analysis-entry-amount-expense">-${roundCurrency(entry.amount).toFixed(2)} zł</div>
                                 </div>
