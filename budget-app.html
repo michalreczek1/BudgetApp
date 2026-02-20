@@ -812,6 +812,86 @@
             color: #d6eaff;
         }
 
+        .balance-split-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .balance-split-row {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 12px;
+        }
+
+        .balance-split-row-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            gap: 8px;
+        }
+
+        .balance-split-row-title {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .balance-split-remove-btn {
+            background: rgba(255, 82, 82, 0.1);
+            border: 1px solid rgba(255, 82, 82, 0.35);
+            color: var(--accent-red);
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .balance-split-fields {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 140px;
+            gap: 10px;
+            align-items: end;
+        }
+
+        .balance-split-field label {
+            display: block;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+            font-size: 0.78rem;
+            font-weight: 500;
+        }
+
+        .balance-split-field select,
+        .balance-split-field input {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .balance-split-field input[readonly] {
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--accent-blue);
+            font-weight: 700;
+        }
+
+        .balance-split-other {
+            margin-top: 8px;
+        }
+
+        .balance-split-add-btn {
+            width: 100%;
+        }
+
         .analysis-list {
             display: flex;
             flex-direction: column;
@@ -1072,6 +1152,10 @@
                 padding: 8px 12px;
                 touch-action: manipulation;
             }
+
+            .balance-split-fields {
+                grid-template-columns: 1fr;
+            }
         }
 
         @media (min-width: 769px) {
@@ -1257,12 +1341,9 @@
 
             <p class="analysis-hint" id="balanceCategoryInfo"></p>
 
-            <div class="category-tiles" id="balanceCategoryTiles"></div>
-
-            <div class="input-group hidden" id="balanceCategoryOtherGroup">
-                <label id="balanceCategoryOtherLabel">Wpisz nazwę kategorii</label>
-                <input type="text" id="balanceCategoryOtherInput" placeholder="np. Fryzjer, Sprzedaż roweru" maxlength="120">
-            </div>
+            <div class="balance-split-list" id="balanceCategorySplitList"></div>
+            <button type="button" class="btn btn-secondary balance-split-add-btn" onclick="addBalanceCategoryRow()">+ Dodaj kategorię</button>
+            <p class="analysis-hint hidden" id="balanceCategorySplitWarning"></p>
 
             <div class="modal-actions">
                 <button class="btn btn-secondary" onclick="cancelBalanceCategory()">Anuluj</button>
@@ -1528,8 +1609,8 @@
         let editingIncomeId = null;
         let editingPaymentId = null;
         let editingExpenseEntryId = null;
-        let selectedBalanceCategory = null;
         let pendingBalanceCategoryChange = null;
+        let balanceCategoryRowCounter = 0;
         let expenseDetailsVisible = false;
         let currentViewDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
         let noonWatcherStarted = false;
@@ -2144,103 +2225,265 @@
             document.getElementById('balanceModal').classList.remove('active');
         }
 
+        function getBalanceCategoryOptions(changeType) {
+            return changeType === 'expense' ? EXPENSE_CATEGORY_OPTIONS : INCOME_CATEGORY_OPTIONS;
+        }
+
+        function buildBalanceCategorySelectOptions(changeType) {
+            return getBalanceCategoryOptions(changeType)
+                .map(option => `<option value="${option.value}">${option.label}</option>`)
+                .join('');
+        }
+
+        function createBalanceCategoryRow(changeType, isPrimary) {
+            balanceCategoryRowCounter += 1;
+            const rowId = balanceCategoryRowCounter;
+            const row = document.createElement('div');
+            row.className = 'balance-split-row';
+            row.dataset.rowId = String(rowId);
+
+            const amountValue = isPrimary ? pendingBalanceCategoryChange.amount.toFixed(2) : '';
+            row.innerHTML = `
+                <div class="balance-split-row-head">
+                    <div class="balance-split-row-title">${isPrimary ? 'Pozycja 1 (automatyczna)' : `Pozycja ${rowId}`}</div>
+                    ${isPrimary ? '' : `<button type="button" class="balance-split-remove-btn" onclick="removeBalanceCategoryRow(${rowId})">Usuń</button>`}
+                </div>
+                <div class="balance-split-fields">
+                    <div class="balance-split-field">
+                        <label>Kategoria</label>
+                        <select class="balance-split-category" onchange="handleBalanceCategorySelectChange(${rowId})">
+                            ${buildBalanceCategorySelectOptions(changeType)}
+                        </select>
+                        <input type="text" class="balance-split-other hidden" placeholder="Wpisz nazwę kategorii" maxlength="120">
+                    </div>
+                    <div class="balance-split-field">
+                        <label>Kwota (zł)</label>
+                        <input type="number" class="balance-split-amount" placeholder="0.00" step="0.01" ${isPrimary ? 'readonly' : ''} value="${amountValue}">
+                    </div>
+                </div>
+            `;
+
+            if (!isPrimary) {
+                row.querySelector('.balance-split-amount').addEventListener('input', syncBalanceCategoryFirstRowAmount);
+            }
+
+            return row;
+        }
+
+        function resetBalanceCategoryRows(changeType) {
+            const list = document.getElementById('balanceCategorySplitList');
+            list.textContent = '';
+            balanceCategoryRowCounter = 0;
+            list.appendChild(createBalanceCategoryRow(changeType, true));
+            syncBalanceCategoryFirstRowAmount();
+        }
+
+        function addBalanceCategoryRow() {
+            if (!pendingBalanceCategoryChange) {
+                return;
+            }
+
+            const list = document.getElementById('balanceCategorySplitList');
+            const row = createBalanceCategoryRow(pendingBalanceCategoryChange.changeType, false);
+            list.appendChild(row);
+            row.querySelector('.balance-split-category').focus();
+            syncBalanceCategoryFirstRowAmount();
+        }
+
+        function removeBalanceCategoryRow(rowId) {
+            const row = document.querySelector(`#balanceCategorySplitList .balance-split-row[data-row-id="${rowId}"]`);
+            if (!row) {
+                return;
+            }
+
+            row.remove();
+            syncBalanceCategoryFirstRowAmount();
+        }
+
+        function handleBalanceCategorySelectChange(rowId) {
+            const row = document.querySelector(`#balanceCategorySplitList .balance-split-row[data-row-id="${rowId}"]`);
+            if (!row) {
+                return;
+            }
+
+            const select = row.querySelector('.balance-split-category');
+            const otherInput = row.querySelector('.balance-split-other');
+            const isOther = select.value === 'inne';
+            otherInput.classList.toggle('hidden', !isOther);
+            if (!isOther) {
+                otherInput.value = '';
+                return;
+            }
+            otherInput.focus();
+        }
+
+        function syncBalanceCategoryFirstRowAmount() {
+            if (!pendingBalanceCategoryChange) {
+                return;
+            }
+
+            const rows = Array.from(document.querySelectorAll('#balanceCategorySplitList .balance-split-row'));
+            if (rows.length === 0) {
+                return;
+            }
+
+            let additionalTotal = 0;
+            rows.slice(1).forEach(row => {
+                const amountInput = row.querySelector('.balance-split-amount');
+                const parsed = Number(amountInput.value);
+                if (Number.isFinite(parsed) && parsed > 0) {
+                    additionalTotal = roundCurrency(additionalTotal + parsed);
+                }
+            });
+
+            const firstAmount = roundCurrency(pendingBalanceCategoryChange.amount - additionalTotal);
+            const firstAmountInput = rows[0].querySelector('.balance-split-amount');
+            firstAmountInput.value = firstAmount.toFixed(2);
+
+            const warning = document.getElementById('balanceCategorySplitWarning');
+            if (firstAmount < 0) {
+                warning.textContent = 'Suma dodatkowych kategorii przekracza całą różnicę. Zmniejsz kwoty.';
+                warning.classList.remove('hidden');
+            } else {
+                warning.textContent = '';
+                warning.classList.add('hidden');
+            }
+        }
+
         function openBalanceCategoryModal(changeType, amount, newBalance) {
             pendingBalanceCategoryChange = {
                 changeType: changeType,
                 amount: roundCurrency(amount),
                 newBalance: roundCurrency(newBalance)
             };
-            selectedBalanceCategory = null;
 
             const title = changeType === 'expense'
                 ? '🧾 Kategoria wydatku'
                 : '💵 Kategoria wpływu';
             const prompt = changeType === 'expense'
-                ? `Saldo zmniejszyło się o ${amount.toFixed(2)} zł. Wybierz kategorię wydatku.`
-                : `Saldo zwiększyło się o ${amount.toFixed(2)} zł. Wybierz kategorię wpływu.`;
+                ? `Saldo zmniejszyło się o ${amount.toFixed(2)} zł. Podziel kwotę na kategorie. Pozycja 1 wylicza się automatycznie.`
+                : `Saldo zwiększyło się o ${amount.toFixed(2)} zł. Podziel kwotę na kategorie. Pozycja 1 wylicza się automatycznie.`;
 
             document.getElementById('balanceCategoryTitle').textContent = title;
             document.getElementById('balanceCategoryInfo').textContent = prompt;
-            document.getElementById('balanceCategoryOtherLabel').textContent = changeType === 'expense'
-                ? 'Podaj nazwę kategorii wydatku'
-                : 'Podaj nazwę kategorii wpływu';
-            document.getElementById('balanceCategoryOtherInput').value = '';
-            document.getElementById('balanceCategoryOtherGroup').classList.add('hidden');
-
-            const options = changeType === 'expense' ? EXPENSE_CATEGORY_OPTIONS : INCOME_CATEGORY_OPTIONS;
-            const tiles = document.getElementById('balanceCategoryTiles');
-            tiles.innerHTML = options.map(option => `
-                <button type="button" class="category-tile" data-value="${option.value}" onclick="selectBalanceCategory('${option.value}')">
-                    ${option.label}
-                </button>
-            `).join('');
+            document.getElementById('balanceCategorySplitWarning').classList.add('hidden');
+            document.getElementById('balanceCategorySplitWarning').textContent = '';
+            resetBalanceCategoryRows(changeType);
 
             document.getElementById('balanceCategoryModal').classList.add('active');
         }
 
         function closeBalanceCategoryModal() {
             document.getElementById('balanceCategoryModal').classList.remove('active');
+            document.getElementById('balanceCategorySplitList').textContent = '';
+            document.getElementById('balanceCategorySplitWarning').classList.add('hidden');
+            document.getElementById('balanceCategorySplitWarning').textContent = '';
             pendingBalanceCategoryChange = null;
-            selectedBalanceCategory = null;
+            balanceCategoryRowCounter = 0;
         }
 
         function cancelBalanceCategory() {
             closeBalanceCategoryModal();
         }
 
-        function selectBalanceCategory(value) {
-            selectedBalanceCategory = value;
-            document.querySelectorAll('#balanceCategoryTiles .category-tile').forEach(tile => {
-                tile.classList.toggle('selected', tile.dataset.value === value);
-            });
-
-            const isOther = value === 'inne';
-            document.getElementById('balanceCategoryOtherGroup').classList.toggle('hidden', !isOther);
-            if (isOther) {
-                document.getElementById('balanceCategoryOtherInput').focus();
-            }
-        }
-
         function confirmBalanceCategory() {
-            if (!pendingBalanceCategoryChange || !selectedBalanceCategory) {
-                alert('Wybierz kategorię');
+            if (!pendingBalanceCategoryChange) {
+                alert('Brak danych zmiany salda');
                 return;
             }
 
-            let finalCategory = selectedBalanceCategory;
-            const otherInput = normalizeUserText(document.getElementById('balanceCategoryOtherInput').value);
-            if (selectedBalanceCategory === 'inne') {
-                if (!otherInput) {
-                    alert('Wpisz nazwę kategorii "inne"');
+            syncBalanceCategoryFirstRowAmount();
+
+            const rows = Array.from(document.querySelectorAll('#balanceCategorySplitList .balance-split-row'));
+            if (rows.length === 0) {
+                alert('Dodaj co najmniej jedną kategorię');
+                return;
+            }
+
+            const additionalAmounts = new Map();
+            let additionalTotal = 0;
+            for (let index = 1; index < rows.length; index += 1) {
+                const amountInput = rows[index].querySelector('.balance-split-amount');
+                const rawValue = amountInput.value.trim();
+                if (!rawValue) {
+                    additionalAmounts.set(index, 0);
+                    continue;
+                }
+
+                const parsed = Number(rawValue);
+                if (!Number.isFinite(parsed) || parsed <= 0) {
+                    alert(`Podaj poprawną kwotę w pozycji ${index + 1}`);
+                    amountInput.focus();
                     return;
                 }
-                finalCategory = otherInput;
+
+                const amountValue = roundCurrency(parsed);
+                additionalAmounts.set(index, amountValue);
+                additionalTotal = roundCurrency(additionalTotal + amountValue);
+            }
+
+            const totalAmount = roundCurrency(pendingBalanceCategoryChange.amount);
+            const firstAmount = roundCurrency(totalAmount - additionalTotal);
+            if (firstAmount < 0) {
+                alert('Suma dodatkowych kategorii przekracza całą różnicę.');
+                return;
             }
 
             const today = formatDateString(new Date());
-            const { changeType, amount, newBalance } = pendingBalanceCategoryChange;
+            const { changeType, newBalance } = pendingBalanceCategoryChange;
+            const allocations = [];
 
-            appStorage.setItem(STORAGE_KEYS.BALANCE, newBalance.toString());
-            if (changeType === 'expense') {
-                recordExpenseEntry({
-                    amount: amount,
-                    category: finalCategory,
-                    date: today,
-                    source: 'balance-update',
-                    name: ''
-                });
-            } else {
-                recordIncomeEntry({
-                    amount: amount,
-                    category: finalCategory,
-                    date: today,
-                    source: 'balance-update',
-                    name: ''
+            for (let index = 0; index < rows.length; index += 1) {
+                const row = rows[index];
+                const amountValue = index === 0 ? firstAmount : (additionalAmounts.get(index) || 0);
+                if (amountValue <= 0) {
+                    continue;
+                }
+
+                const categorySelect = row.querySelector('.balance-split-category');
+                let finalCategory = normalizeUserText(categorySelect.value);
+                if (finalCategory === 'inne') {
+                    const otherInput = normalizeUserText(row.querySelector('.balance-split-other').value);
+                    if (!otherInput) {
+                        alert(`Wpisz nazwę kategorii "inne" w pozycji ${index + 1}`);
+                        row.querySelector('.balance-split-other').focus();
+                        return;
+                    }
+                    finalCategory = otherInput;
+                }
+
+                allocations.push({
+                    amount: amountValue,
+                    category: finalCategory || 'inne'
                 });
             }
 
-            pendingBalanceCategoryChange = null;
-            selectedBalanceCategory = null;
+            if (allocations.length === 0) {
+                alert('Brak kwot do zapisania. Uzupełnij podział kategorii.');
+                return;
+            }
+
+            appStorage.setItem(STORAGE_KEYS.BALANCE, newBalance.toString());
+            allocations.forEach(allocation => {
+                if (changeType === 'expense') {
+                    recordExpenseEntry({
+                        amount: allocation.amount,
+                        category: allocation.category,
+                        date: today,
+                        source: 'balance-update',
+                        name: ''
+                    });
+                } else {
+                    recordIncomeEntry({
+                        amount: allocation.amount,
+                        category: allocation.category,
+                        date: today,
+                        source: 'balance-update',
+                        name: ''
+                    });
+                }
+            });
+
             closeBalanceCategoryModal();
             closeBalanceModal();
             loadBalance();
