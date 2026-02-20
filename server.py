@@ -1104,6 +1104,49 @@ def get_due_income_occurrences(income, today_value, include_today):
     return due
 
 
+MANUAL_SETTLEMENT_REASON_RE = re.compile(r"^manual-(payment|income)-(\d+)-(\d{4}-\d{2}-\d{2})$")
+
+
+def parse_manual_settlement_reason(run_reason):
+    reason_value = str(run_reason or "").strip().lower()
+    match = MANUAL_SETTLEMENT_REASON_RE.match(reason_value)
+    if not match:
+        return None
+
+    target_type, target_id_raw, occurrence = match.groups()
+    if not is_iso_date(occurrence):
+        return None
+
+    try:
+        target_id = int(target_id_raw)
+    except (TypeError, ValueError):
+        return None
+
+    return {
+        "type": target_type,
+        "id": target_id,
+        "occurrence": occurrence,
+    }
+
+
+def is_payment_occurrence_for_date(payment, occurrence):
+    occurrence_date = parse_iso_date(occurrence)
+    if not occurrence_date:
+        return False
+
+    expected_occurrence = get_payment_occurrence_for_month(payment, occurrence_date.year, occurrence_date.month)
+    return expected_occurrence == occurrence
+
+
+def is_income_occurrence_for_date(income, occurrence):
+    occurrence_date = parse_iso_date(occurrence)
+    if not occurrence_date:
+        return False
+
+    expected_occurrence = get_income_occurrence_for_month(income, occurrence_date.year, occurrence_date.month)
+    return expected_occurrence == occurrence
+
+
 def next_entry_id(expense_entries, income_entries):
     max_id = 0
     for entry in list(expense_entries) + list(income_entries):
@@ -1119,7 +1162,8 @@ def next_entry_id(expense_entries, income_entries):
 def apply_server_settlement(state, run_reason):
     clean_state = sanitize_state(state)
     now_local = app_now()
-    include_today = now_local.hour >= 12
+    manual_target = parse_manual_settlement_reason(run_reason)
+    include_today = now_local.hour >= 12 or manual_target is not None
     today_local = now_local.date()
     today_iso = today_local.isoformat()
 
@@ -1136,7 +1180,20 @@ def apply_server_settlement(state, run_reason):
 
     for payment in clean_state.get("payments", []):
         payment_item = sanitize_payment(payment)
-        due_occurrences = get_due_payment_occurrences(payment_item, today_local, include_today)
+        if manual_target and manual_target["type"] == "payment":
+            target_occurrence = manual_target["occurrence"]
+            target_id = manual_target["id"]
+            is_target_payment = int(payment_item.get("id", 0)) == target_id
+            can_settle_target = (
+                is_target_payment
+                and is_payment_occurrence_for_date(payment_item, target_occurrence)
+                and not is_paid_occurrence(payment_item, target_occurrence)
+            )
+            due_occurrences = [target_occurrence] if can_settle_target else []
+        elif manual_target and manual_target["type"] != "payment":
+            due_occurrences = []
+        else:
+            due_occurrences = get_due_payment_occurrences(payment_item, today_local, include_today)
         if not due_occurrences:
             payments.append(payment_item)
             continue
@@ -1188,7 +1245,20 @@ def apply_server_settlement(state, run_reason):
 
     for income in clean_state.get("incomes", []):
         income_item = sanitize_income(income)
-        due_occurrences = get_due_income_occurrences(income_item, today_local, include_today)
+        if manual_target and manual_target["type"] == "income":
+            target_occurrence = manual_target["occurrence"]
+            target_id = manual_target["id"]
+            is_target_income = int(income_item.get("id", 0)) == target_id
+            can_settle_target = (
+                is_target_income
+                and is_income_occurrence_for_date(income_item, target_occurrence)
+                and not is_received_occurrence(income_item, target_occurrence)
+            )
+            due_occurrences = [target_occurrence] if can_settle_target else []
+        elif manual_target and manual_target["type"] != "income":
+            due_occurrences = []
+        else:
+            due_occurrences = get_due_income_occurrences(income_item, today_local, include_today)
         if not due_occurrences:
             incomes_plan.append(income_item)
             continue

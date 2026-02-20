@@ -1030,6 +1030,48 @@
             .install-app-btn {
                 bottom: calc(env(safe-area-inset-bottom, 0px) + 92px);
             }
+
+            .payment-item {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                grid-template-areas:
+                    "info amount"
+                    "info action";
+                align-items: start;
+                gap: 10px 12px;
+                padding: 16px;
+            }
+
+            .payment-info {
+                grid-area: info;
+                min-width: 0;
+            }
+
+            .payment-meta {
+                gap: 8px;
+                row-gap: 6px;
+            }
+
+            .payment-amount {
+                grid-area: amount;
+                justify-self: end;
+                align-self: start;
+                margin-right: 0;
+                line-height: 1.15;
+                font-size: clamp(1rem, 4.5vw, 1.3rem);
+                white-space: nowrap;
+                text-align: right;
+            }
+
+            .paid-btn {
+                grid-area: action;
+                justify-self: end;
+                align-self: end;
+                margin-right: 0;
+                min-height: 36px;
+                padding: 8px 12px;
+                touch-action: manipulation;
+            }
         }
 
         @media (min-width: 769px) {
