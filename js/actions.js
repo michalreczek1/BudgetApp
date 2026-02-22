@@ -35,8 +35,11 @@ export function createActionsController({
     toggleMonth,
     getEditingIncomeId,
     getEditingPaymentId,
-    deleteIncome,
-    deletePayment,
+    appStorage,
+    storageKeys,
+    loadIncomes,
+    loadPayments,
+    updateCalculations,
     saveIncome,
     savePayment,
     changePin,
@@ -44,6 +47,52 @@ export function createActionsController({
     restoreBackup,
     installApp
 }) {
+    function deletePayment(id) {
+        const stored = appStorage.getItem(storageKeys.PAYMENTS);
+        let payments = stored ? JSON.parse(stored) : [];
+        const payment = payments.find(p => p.id === id);
+        if (!payment) {
+            return false;
+        }
+
+        const isRecurring = payment.frequency !== 'once';
+        const shouldDelete = confirm(isRecurring
+            ? 'Usunąć całą serię płatności?'
+            : 'Usunąć tę płatność?');
+        if (!shouldDelete) {
+            return false;
+        }
+
+        payments = payments.filter(p => p.id !== id);
+        appStorage.setItem(storageKeys.PAYMENTS, JSON.stringify(payments));
+        loadPayments();
+        updateCalculations();
+        return true;
+    }
+
+    function deleteIncome(id) {
+        const stored = appStorage.getItem(storageKeys.INCOMES);
+        let incomes = stored ? JSON.parse(stored) : [];
+        const income = incomes.find(i => i.id === id);
+        if (!income) {
+            return false;
+        }
+
+        const isRecurring = income.frequency !== 'once';
+        const shouldDelete = confirm(isRecurring
+            ? 'Usunąć całą serię wpływów?'
+            : 'Usunąć ten wpływ?');
+        if (!shouldDelete) {
+            return false;
+        }
+
+        incomes = incomes.filter(i => i.id !== id);
+        appStorage.setItem(storageKeys.INCOMES, JSON.stringify(incomes));
+        loadIncomes();
+        updateCalculations();
+        return true;
+    }
+
     function deletePaymentFromModal() {
         const editingPaymentId = getEditingPaymentId();
         if (editingPaymentId === null) {
@@ -116,6 +165,8 @@ export function createActionsController({
     }
 
     return {
+        deletePayment,
+        deleteIncome,
         deletePaymentFromModal,
         deleteIncomeFromModal,
         publicActions,

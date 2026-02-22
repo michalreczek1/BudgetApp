@@ -1415,51 +1415,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
 
         // List rendering for payments/incomes (provided by render controller)
 
-        function deletePayment(id) {
-            const stored = appStorage.getItem(STORAGE_KEYS.PAYMENTS);
-            let payments = stored ? JSON.parse(stored) : [];
-            const payment = payments.find(p => p.id === id);
-            if (!payment) {
-                return false;
-            }
-
-            const isRecurring = payment.frequency !== 'once';
-            const shouldDelete = confirm(isRecurring
-                ? 'Usunąć całą serię płatności?'
-                : 'Usunąć tę płatność?');
-            if (!shouldDelete) {
-                return false;
-            }
-
-            payments = payments.filter(p => p.id !== id);
-            appStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
-            loadPayments();
-            updateCalculations();
-            return true;
-        }
-
-        function deleteIncome(id) {
-            const stored = appStorage.getItem(STORAGE_KEYS.INCOMES);
-            let incomes = stored ? JSON.parse(stored) : [];
-            const income = incomes.find(i => i.id === id);
-            if (!income) {
-                return false;
-            }
-
-            const isRecurring = income.frequency !== 'once';
-            const shouldDelete = confirm(isRecurring
-                ? 'Usunąć całą serię wpływów?'
-                : 'Usunąć ten wpływ?');
-            if (!shouldDelete) {
-                return false;
-            }
-
-            incomes = incomes.filter(i => i.id !== id);
-            appStorage.setItem(STORAGE_KEYS.INCOMES, JSON.stringify(incomes));
-            loadIncomes();
-            updateCalculations();
-            return true;
-        }
+        // Delete payment/income actions (provided by actions controller)
 
         // Admin actions: backup and PIN
         const {
@@ -1503,8 +1459,11 @@ const parseUserDateToISO = importedParseUserDateToISO;
             toggleMonth,
             getEditingIncomeId: () => editingIncomeId,
             getEditingPaymentId: () => editingPaymentId,
-            deleteIncome,
-            deletePayment,
+            appStorage,
+            storageKeys: STORAGE_KEYS,
+            loadIncomes,
+            loadPayments,
+            updateCalculations,
             saveIncome,
             savePayment,
             changePin,
