@@ -10,12 +10,14 @@
         };
         const ADMIN_SUCCESS_DEFAULT_MESSAGE = 'PIN został pomyślnie zmieniony!';
         const MAX_TEXT_LENGTH = 120;
+        const CLIENT_DEPRECATED_PIN_VALUE = '__deprecated__';
         const PLN_CURRENCY_FORMATTER = new Intl.NumberFormat('pl-PL', {
             style: 'currency',
             currency: 'PLN',
             minimumFractionDigits: 2,
             maximumFractionDigits: 2
         });
+        const DATE_UTILS = window.BudgetDateUtils || {};
 
         const EXPENSE_CATEGORY_OPTIONS = [
             { value: 'jedzenie', label: '🍽️ Jedzenie', icon: '🍽️' },
@@ -51,7 +53,7 @@
         let incomeAnalysisRequestId = 0;
         let deferredInstallPrompt = null;
         let appState = {
-            pin: '1234',
+            pin: CLIENT_DEPRECATED_PIN_VALUE,
             version: 1,
             balance: 0,
             payments: [],
@@ -103,7 +105,7 @@
             };
 
             return {
-                pin: typeof rawState?.pin === 'string' && rawState.pin.length > 0 ? rawState.pin : '1234',
+                pin: CLIENT_DEPRECATED_PIN_VALUE,
                 version: Number.isFinite(version) && version > 0 ? Math.trunc(version) : 1,
                 balance: Number.isFinite(balance) ? balance : 0,
                 payments: Array.isArray(rawState?.payments) ? rawState.payments : [],
@@ -117,7 +119,6 @@
 
         function isStateEffectivelyEmpty(state) {
             return (
-                state.pin === '1234' &&
                 Number(state.version) === 1 &&
                 Number(state.balance) === 0 &&
                 Array.isArray(state.payments) &&
@@ -162,7 +163,6 @@
                 }
 
                 const legacyState = sanitizeState({
-                    pin: legacyPin || '1234',
                     balance: legacyBalanceRaw,
                     payments: legacyPayments,
                     incomes: legacyIncomes
@@ -432,7 +432,7 @@
         const appStorage = {
             getItem(key) {
                 if (key === STORAGE_KEYS.PIN) {
-                    return appState.pin;
+                    return CLIENT_DEPRECATED_PIN_VALUE;
                 }
                 if (key === STORAGE_KEYS.BALANCE) {
                     return String(appState.balance);
@@ -459,7 +459,7 @@
             },
             setItem(key, value) {
                 if (key === STORAGE_KEYS.PIN) {
-                    appState.pin = String(value || '1234');
+                    appState.pin = CLIENT_DEPRECATED_PIN_VALUE;
                 } else if (key === STORAGE_KEYS.BALANCE) {
                     const parsed = parseFloat(value);
                     appState.balance = Number.isFinite(parsed) ? parsed : 0;
@@ -1037,44 +1037,17 @@
         }
 
         function parseDateString(dateString) {
-            if (!dateString || typeof dateString !== 'string') {
-                return new Date(NaN);
+            if (typeof DATE_UTILS.parseDateString === 'function') {
+                return DATE_UTILS.parseDateString(dateString);
             }
-
-            let year;
-            let month;
-            let day;
-
-            if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-                [year, month, day] = dateString.split('-').map(Number);
-            } else {
-                const match = dateString.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
-                if (!match) {
-                    return new Date(NaN);
-                }
-
-                day = Number(match[1]);
-                month = Number(match[2]);
-                year = Number(match[3]);
-            }
-
-            const parsedDate = new Date(year, month - 1, day);
-            if (
-                parsedDate.getFullYear() !== year ||
-                parsedDate.getMonth() !== month - 1 ||
-                parsedDate.getDate() !== day
-            ) {
-                return new Date(NaN);
-            }
-
-            return parsedDate;
+            return new Date(NaN);
         }
 
         function formatDateString(date) {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
+            if (typeof DATE_UTILS.formatDateString === 'function') {
+                return DATE_UTILS.formatDateString(date);
+            }
+            return '';
         }
 
         function roundCurrency(value) {
@@ -1232,7 +1205,7 @@
             if (Number.isNaN(parsedDate.getTime())) {
                 return escapeHtml(dateString);
             }
-            return parsedDate.toLocaleDateString('pl-PL');
+            return formatDateToPolish(dateString);
         }
 
         function buildCategoryTotals(entries) {
@@ -1292,29 +1265,17 @@
         }
 
         function formatDateToPolish(dateString) {
-            const date = parseDateString(dateString);
-            if (Number.isNaN(date.getTime())) {
-                return '';
+            if (typeof DATE_UTILS.formatDateToPolish === 'function') {
+                return DATE_UTILS.formatDateToPolish(dateString);
             }
-
-            const day = String(date.getDate()).padStart(2, '0');
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const year = date.getFullYear();
-            return `${day}/${month}/${year}`;
+            return '';
         }
 
         function parseUserDateToISO(inputValue) {
-            const value = (inputValue || '').trim();
-            if (!value) {
-                return null;
+            if (typeof DATE_UTILS.parseUserDateToISO === 'function') {
+                return DATE_UTILS.parseUserDateToISO(inputValue);
             }
-
-            const parsedDate = parseDateString(value);
-            if (Number.isNaN(parsedDate.getTime())) {
-                return null;
-            }
-
-            return formatDateString(parsedDate);
+            return null;
         }
 
         function normalizeUserText(value, maxLength = MAX_TEXT_LENGTH) {
@@ -2388,7 +2349,7 @@
 
                     const dateNode = document.createElement('div');
                     dateNode.className = 'payment-date';
-                    dateNode.textContent = parseDateString(income.date).toLocaleDateString('pl-PL');
+                    dateNode.textContent = formatDateToPolish(income.date);
                     meta.appendChild(dateNode);
 
                     const freq = document.createElement('span');
@@ -2430,7 +2391,7 @@
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
                 document.getElementById('daysToIncome').textContent = diffDays >= 0 ? diffDays + ' dni' : '0 dni';
-                document.getElementById('nextIncomeDate').textContent = 'Wpływ: ' + nextDate.toLocaleDateString('pl-PL');
+                document.getElementById('nextIncomeDate').textContent = 'Wpływ: ' + formatDateToPolish(nextIncome.date);
             } else {
                 document.getElementById('daysToIncome').textContent = '-- dni';
                 document.getElementById('nextIncomeDate').textContent = 'Brak zaplanowanych wpływów';
@@ -2491,7 +2452,7 @@
 
                 const dateNode = document.createElement('div');
                 dateNode.className = 'payment-date';
-                dateNode.textContent = parseDateString(payment.date).toLocaleDateString('pl-PL');
+                dateNode.textContent = formatDateToPolish(payment.date);
                 meta.appendChild(dateNode);
 
                 if (payment.frequency === 'monthly' || payment.frequency === 'selected') {

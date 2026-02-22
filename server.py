@@ -78,6 +78,7 @@ STATIC_FILE_WHITELIST = {
     "/": "budget-app.html",
     "/budget-app.html": "budget-app.html",
     "/style.css": "style.css",
+    "/date-utils.js": "date-utils.js",
     "/app.js": "app.js",
     "/service-worker.js": "service-worker.js",
     "/manifest.webmanifest": "manifest.webmanifest",
