@@ -12,6 +12,13 @@ import {
 } from './js/formatters.js';
 import { showToast } from './js/toast.js';
 import { createPwaController } from './js/pwa.js';
+import {
+    apiFetchState,
+    apiSaveState,
+    apiFetchAuthStatus,
+    apiRunSettlement,
+    apiFetchTransactionsForAnalysis
+} from './js/api.js';
 
 if (
     typeof importedParseDateString !== 'function' ||
@@ -202,27 +209,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
 
         // API: state and auth
         async function fetchStateFromServer() {
-            const response = await fetch('/api/state', {
-                method: 'GET',
-                headers: { 'Accept': 'application/json' },
-                cache: 'no-store',
-                credentials: 'same-origin'
-            });
-
-            if (!response.ok) {
-                let details = {};
-                try {
-                    details = await response.json();
-                } catch {
-                    details = {};
-                }
-                const error = new Error(`GET /api/state failed: ${response.status}`);
-                error.status = response.status;
-                error.details = details;
-                throw error;
-            }
-
-            const data = await response.json();
+            const data = await apiFetchState();
             appState = sanitizeState(data);
         }
 
@@ -230,27 +217,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
             const payload = JSON.parse(JSON.stringify(appState));
             delete payload.pin;
             payload.version = Number(appState.version) || 1;
-            const response = await fetch('/api/state', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-                credentials: 'same-origin'
-            });
-
-            if (!response.ok) {
-                let details = {};
-                try {
-                    details = await response.json();
-                } catch {
-                    details = {};
-                }
-                const error = new Error(`PUT /api/state failed: ${response.status}`);
-                error.status = response.status;
-                error.details = details;
-                throw error;
-            }
-
-            const result = await response.json().catch(() => ({}));
+            const result = await apiSaveState(payload);
             const updatedVersion = Number(result?.state?.version);
             if (Number.isFinite(updatedVersion) && updatedVersion > 0) {
                 appState.version = Math.trunc(updatedVersion);
@@ -258,20 +225,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
         }
 
         async function fetchAuthStatus() {
-            const response = await fetch('/api/auth/status', {
-                method: 'GET',
-                headers: { 'Accept': 'application/json' },
-                cache: 'no-store',
-                credentials: 'same-origin'
-            });
-
-            if (!response.ok) {
-                const error = new Error(`GET /api/auth/status failed: ${response.status}`);
-                error.status = response.status;
-                throw error;
-            }
-
-            return response.json();
+            return apiFetchAuthStatus();
         }
 
         // PWA install and service worker
@@ -1461,21 +1415,13 @@ const parseUserDateToISO = importedParseUserDateToISO;
 
         // Server settlement actions
         async function runServerSettlement(reason) {
-            const response = await fetch('/api/settlements/run', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'same-origin',
-                body: JSON.stringify({ reason: normalizeUserText(reason || 'manual') })
-            });
-
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                if (response.status === 401) {
+            let data;
+            try {
+                data = await apiRunSettlement(normalizeUserText(reason || 'manual'));
+            } catch (error) {
+                if (error?.status === 401) {
                     handleUnauthorizedSession('Sesja wygasła. Zaloguj się ponownie.');
                 }
-                const error = new Error(`POST /api/settlements/run failed: ${response.status}`);
-                error.status = response.status;
-                error.details = data;
                 throw error;
             }
 
@@ -1591,30 +1537,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
                 };
             }
 
-            const response = await fetch(
-                `/api/transactions?type=${encodeURIComponent(entryType)}&month=${encodeURIComponent(monthValue)}`,
-                {
-                    method: 'GET',
-                    headers: { 'Accept': 'application/json' },
-                    cache: 'no-store',
-                    credentials: 'same-origin'
-                }
-            );
-
-            if (!response.ok) {
-                let details = {};
-                try {
-                    details = await response.json();
-                } catch {
-                    details = {};
-                }
-                const error = new Error(`GET /api/transactions failed: ${response.status}`);
-                error.status = response.status;
-                error.details = details;
-                throw error;
-            }
-
-            return response.json();
+            return apiFetchTransactionsForAnalysis(entryType, monthValue);
         }
 
         function toggleExpenseDetails() {

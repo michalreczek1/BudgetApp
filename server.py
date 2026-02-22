@@ -83,6 +83,7 @@ STATIC_FILE_WHITELIST = {
     "/js/formatters.js": "js/formatters.js",
     "/js/toast.js": "js/toast.js",
     "/js/pwa.js": "js/pwa.js",
+    "/js/api.js": "js/api.js",
     "/service-worker.js": "service-worker.js",
     "/manifest.webmanifest": "manifest.webmanifest",
     "/icon-192.png": "icon-192.png",
