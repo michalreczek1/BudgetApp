@@ -458,20 +458,32 @@ const parseUserDateToISO = importedParseUserDateToISO;
             changeViewMonth,
             goToCurrentMonth,
             loadBalance,
-            updateCalculations
+            updateCalculations,
+            loadIncomes,
+            loadPayments
         } = createRenderController({
             getCurrentViewDate: () => currentViewDate,
             setCurrentViewDate: nextDate => {
                 currentViewDate = nextDate;
             },
-            loadPayments,
-            loadIncomes,
             appStorage,
             storageKeys: STORAGE_KEYS,
             normalizeDate,
             getPaymentOccurrenceForMonth,
             isOccurrencePaid,
-            formatCurrencyPLN
+            getIncomeOccurrenceForMonth,
+            isIncomeOccurrenceReceived,
+            getNextIncomeOccurrenceFromDate,
+            parseDateString,
+            formatDateToPolish,
+            formatCurrencyPLN,
+            formatExpenseAmountPLN,
+            formatIncomeAmountPLN,
+            normalizeUserText,
+            openEditIncome,
+            openEditPayment,
+            markIncomeAsReceived,
+            markPaymentAsPaid
         });
 
         const {
@@ -1401,208 +1413,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
             savePayment();
         }
 
-        function loadIncomes() {
-            const stored = appStorage.getItem(STORAGE_KEYS.INCOMES);
-            const incomes = stored ? JSON.parse(stored) : [];
-            const today = normalizeDate(new Date());
-            const viewMonth = normalizeDate(new Date(currentViewDate.getFullYear(), currentViewDate.getMonth(), 1));
-            const visibleIncomes = [];
-            let nextIncome = null;
-
-            incomes.forEach(income => {
-                const occurrenceForView = getIncomeOccurrenceForMonth(income, viewMonth);
-                if (occurrenceForView && !isIncomeOccurrenceReceived(income, occurrenceForView)) {
-                    visibleIncomes.push({
-                        ...income,
-                        date: occurrenceForView,
-                        isRecurring: income.frequency !== 'once'
-                    });
-                }
-
-                const nextOccurrence = getNextIncomeOccurrenceFromDate(income, today);
-                if (!nextOccurrence) {
-                    return;
-                }
-
-                const nextOccurrenceDate = parseDateString(nextOccurrence);
-                if (!nextIncome || nextOccurrenceDate < parseDateString(nextIncome.date)) {
-                    nextIncome = {
-                        ...income,
-                        date: nextOccurrence
-                    };
-                }
-            });
-
-            visibleIncomes.sort((a, b) => parseDateString(a.date) - parseDateString(b.date));
-
-            const listElement = document.getElementById('incomeList');
-            
-            if (visibleIncomes.length === 0) {
-                listElement.innerHTML = `
-                    <div class="empty-state">
-                        <div class="icon">💰</div>
-                        <p>Brak zaplanowanych wpływów w tym miesiącu</p>
-                    </div>
-                `;
-            } else {
-                listElement.textContent = '';
-                visibleIncomes.forEach(income => {
-                    const row = document.createElement('div');
-                    row.className = 'payment-item editable';
-                    row.title = 'Kliknij, aby edytować serię';
-                    row.addEventListener('click', () => openEditIncome(income.id));
-
-                    const info = document.createElement('div');
-                    info.className = 'payment-info';
-
-                    const name = document.createElement('div');
-                    name.className = 'payment-name';
-                    name.textContent = normalizeUserText(income.name);
-                    info.appendChild(name);
-
-                    const meta = document.createElement('div');
-                    meta.className = 'payment-meta';
-
-                    const dateNode = document.createElement('div');
-                    dateNode.className = 'payment-date';
-                    dateNode.textContent = formatDateToPolish(income.date);
-                    meta.appendChild(dateNode);
-
-                    const freq = document.createElement('span');
-                    freq.className = income.frequency === 'monthly'
-                        ? 'payment-frequency freq-monthly'
-                        : 'payment-frequency freq-income';
-                    freq.textContent = income.frequency === 'monthly' ? 'Co miesiąc' : 'Jednorazowy';
-                    meta.appendChild(freq);
-
-                    info.appendChild(meta);
-                    row.appendChild(info);
-
-                    const amount = document.createElement('div');
-                    amount.className = 'payment-amount income';
-                    amount.textContent = formatIncomeAmountPLN(income.amount || 0);
-                    row.appendChild(amount);
-
-                    if (parseDateString(income.date) <= today) {
-                        const paidBtn = document.createElement('button');
-                        paidBtn.className = 'paid-btn';
-                        paidBtn.type = 'button';
-                        paidBtn.textContent = 'Zaksięgowano';
-                        paidBtn.addEventListener('click', event => {
-                            event.stopPropagation();
-                            markIncomeAsReceived(income.id, income.date);
-                        });
-                        row.appendChild(paidBtn);
-                    }
-
-                    listElement.appendChild(row);
-                });
-            }
-
-            // Update next income countdown
-            if (nextIncome) {
-                const nextDate = parseDateString(nextIncome.date);
-                
-                const diffTime = nextDate - today;
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-                document.getElementById('daysToIncome').textContent = diffDays >= 0 ? diffDays + ' dni' : '0 dni';
-                document.getElementById('nextIncomeDate').textContent = 'Wpływ: ' + formatDateToPolish(nextIncome.date);
-            } else {
-                document.getElementById('daysToIncome').textContent = '-- dni';
-                document.getElementById('nextIncomeDate').textContent = 'Brak zaplanowanych wpływów';
-            }
-        }
-
-        function loadPayments() {
-            const stored = appStorage.getItem(STORAGE_KEYS.PAYMENTS);
-            const payments = stored ? JSON.parse(stored) : [];
-            const today = normalizeDate(new Date());
-            const viewMonth = normalizeDate(new Date(currentViewDate.getFullYear(), currentViewDate.getMonth(), 1));
-            const visiblePayments = [];
-
-            payments.forEach(payment => {
-                const occurrenceForView = getPaymentOccurrenceForMonth(payment, viewMonth);
-                if (!occurrenceForView || isOccurrencePaid(payment, occurrenceForView)) {
-                    return;
-                }
-
-                visiblePayments.push({
-                    ...payment,
-                    date: occurrenceForView,
-                    isRecurring: payment.frequency !== 'once'
-                });
-            });
-
-            visiblePayments.sort((a, b) => parseDateString(a.date) - parseDateString(b.date));
-
-            const listElement = document.getElementById('paymentsList');
-            
-            if (visiblePayments.length === 0) {
-                listElement.innerHTML = `
-                    <div class="empty-state">
-                        <div class="icon">📭</div>
-                        <p>Brak zaplanowanych płatności w tym miesiącu</p>
-                    </div>
-                `;
-                return;
-            }
-
-            listElement.textContent = '';
-            visiblePayments.forEach(payment => {
-                const row = document.createElement('div');
-                row.className = 'payment-item editable';
-                row.title = 'Kliknij, aby edytować serię';
-                row.addEventListener('click', () => openEditPayment(payment.id));
-
-                const info = document.createElement('div');
-                info.className = 'payment-info';
-
-                const name = document.createElement('div');
-                name.className = 'payment-name';
-                name.textContent = normalizeUserText(payment.name);
-                info.appendChild(name);
-
-                const meta = document.createElement('div');
-                meta.className = 'payment-meta';
-
-                const dateNode = document.createElement('div');
-                dateNode.className = 'payment-date';
-                dateNode.textContent = formatDateToPolish(payment.date);
-                meta.appendChild(dateNode);
-
-                if (payment.frequency === 'monthly' || payment.frequency === 'selected') {
-                    const freq = document.createElement('span');
-                    freq.className = payment.frequency === 'monthly'
-                        ? 'payment-frequency freq-monthly'
-                        : 'payment-frequency freq-selected';
-                    freq.textContent = payment.frequency === 'monthly' ? 'Co miesiąc' : 'Wybrane miesiące';
-                    meta.appendChild(freq);
-                }
-
-                info.appendChild(meta);
-                row.appendChild(info);
-
-                const amount = document.createElement('div');
-                amount.className = 'payment-amount expense';
-                amount.textContent = formatExpenseAmountPLN(payment.amount || 0);
-                row.appendChild(amount);
-
-                if (parseDateString(payment.date) <= today) {
-                    const paidBtn = document.createElement('button');
-                    paidBtn.className = 'paid-btn';
-                    paidBtn.type = 'button';
-                    paidBtn.textContent = 'Opłacone';
-                    paidBtn.addEventListener('click', event => {
-                        event.stopPropagation();
-                        markPaymentAsPaid(payment.id, payment.date);
-                    });
-                    row.appendChild(paidBtn);
-                }
-
-                listElement.appendChild(row);
-            });
-        }
+        // List rendering for payments/incomes (provided by render controller)
 
         function deletePayment(id) {
             const stored = appStorage.getItem(STORAGE_KEYS.PAYMENTS);
