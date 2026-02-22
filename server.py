@@ -77,6 +77,8 @@ MAX_BACKUP_UPLOAD_BYTES = env_int("MAX_BACKUP_UPLOAD_BYTES", 25 * 1024 * 1024, 1
 STATIC_FILE_WHITELIST = {
     "/": "budget-app.html",
     "/budget-app.html": "budget-app.html",
+    "/style.css": "style.css",
+    "/app.js": "app.js",
     "/service-worker.js": "service-worker.js",
     "/manifest.webmanifest": "manifest.webmanifest",
     "/icon-192.png": "icon-192.png",
