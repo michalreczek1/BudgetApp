@@ -16,6 +16,7 @@ import { createAdminController } from './js/admin.js';
 import { createRenderController } from './js/render.js';
 import { createAnalysisController } from './js/analysis.js';
 import { createUiModalsController } from './js/ui-modals.js';
+import { createActionsController } from './js/actions.js';
 import {
     normalizeDate,
     isOccurrencePaid,
@@ -1649,28 +1650,12 @@ const parseUserDateToISO = importedParseUserDateToISO;
             return true;
         }
 
-        function deletePaymentFromModal() {
-            if (editingPaymentId === null) {
-                return;
-            }
-
-            if (deletePayment(editingPaymentId)) {
-                closePaymentModal();
-            }
-        }
-
-        function deleteIncomeFromModal() {
-            if (editingIncomeId === null) {
-                return;
-            }
-
-            if (deleteIncome(editingIncomeId)) {
-                closeIncomeModal();
-            }
-        }
-
         // Admin actions: backup and PIN
-        const publicActions = {
+        const {
+            deletePaymentFromModal,
+            deleteIncomeFromModal,
+            exposePublicActions
+        } = createActionsController({
             login,
             logout,
             changeViewMonth,
@@ -1705,17 +1690,19 @@ const parseUserDateToISO = importedParseUserDateToISO;
             selectIncomeFrequency,
             selectPaymentFrequency,
             toggleMonth,
-            deleteIncomeFromModal,
-            deletePaymentFromModal,
+            getEditingIncomeId: () => editingIncomeId,
+            getEditingPaymentId: () => editingPaymentId,
+            deleteIncome,
+            deletePayment,
             saveIncome,
             savePayment,
             changePin,
             downloadBackup,
             restoreBackup,
             installApp
-        };
+        });
 
-        Object.assign(window, publicActions);
+        exposePublicActions(window);
 
         // Bootstrapping
         document.getElementById('pin4').addEventListener('keypress', function(e) {
