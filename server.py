@@ -85,6 +85,8 @@ STATIC_FILE_WHITELIST = {
     "/js/pwa.js": "js/pwa.js",
     "/js/api.js": "js/api.js",
     "/js/admin.js": "js/admin.js",
+    "/js/render.js": "js/render.js",
+    "/js/analysis.js": "js/analysis.js",
     "/service-worker.js": "service-worker.js",
     "/manifest.webmanifest": "manifest.webmanifest",
     "/icon-192.png": "icon-192.png",
