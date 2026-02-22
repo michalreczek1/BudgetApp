@@ -1,7 +1,6 @@
-(function (globalScope) {
-    const PL_DATE_FORMATTER = new Intl.DateTimeFormat('pl-PL');
+const PL_DATE_FORMATTER = new Intl.DateTimeFormat('pl-PL');
 
-    function parseDateString(dateString) {
+export function parseDateString(dateString) {
         if (!dateString || typeof dateString !== 'string') {
             return new Date(NaN);
         }
@@ -38,9 +37,9 @@
         }
 
         return parsedDate;
-    }
+}
 
-    function formatDateString(date) {
+export function formatDateString(date) {
         const parsedDate = date instanceof Date ? date : new Date(date);
         if (Number.isNaN(parsedDate.getTime())) {
             return '';
@@ -50,17 +49,17 @@
         const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
         const day = String(parsedDate.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
-    }
+}
 
-    function formatDateToPolish(dateString) {
+export function formatDateToPolish(dateString) {
         const parsedDate = parseDateString(dateString);
         if (Number.isNaN(parsedDate.getTime())) {
             return '';
         }
         return PL_DATE_FORMATTER.format(parsedDate);
-    }
+}
 
-    function parseUserDateToISO(inputValue) {
+export function parseUserDateToISO(inputValue) {
         const value = (inputValue || '').trim();
         if (!value) {
             return null;
@@ -72,18 +71,4 @@
         }
 
         return formatDateString(parsedDate);
-    }
-
-    const api = {
-        parseDateString,
-        formatDateString,
-        formatDateToPolish,
-        parseUserDateToISO
-    };
-
-    globalScope.BudgetDateUtils = api;
-
-    if (typeof module !== 'undefined' && module.exports) {
-        module.exports = api;
-    }
-})(typeof globalThis !== 'undefined' ? globalThis : window);
+}

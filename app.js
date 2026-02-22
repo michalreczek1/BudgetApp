@@ -1,3 +1,33 @@
+import {
+    parseDateString as importedParseDateString,
+    formatDateString as importedFormatDateString,
+    formatDateToPolish as importedFormatDateToPolish,
+    parseUserDateToISO as importedParseUserDateToISO
+} from './date-utils.js';
+import {
+    roundCurrency,
+    formatCurrencyPLN,
+    formatExpenseAmountPLN,
+    formatIncomeAmountPLN
+} from './js/formatters.js';
+import { showToast } from './js/toast.js';
+import { createPwaController } from './js/pwa.js';
+
+if (
+    typeof importedParseDateString !== 'function' ||
+    typeof importedFormatDateString !== 'function' ||
+    typeof importedFormatDateToPolish !== 'function' ||
+    typeof importedParseUserDateToISO !== 'function'
+) {
+    console.error('Nie udało się załadować modułu date-utils.js');
+    throw new Error('date-utils module unavailable');
+}
+
+const parseDateString = importedParseDateString;
+const formatDateString = importedFormatDateString;
+const formatDateToPolish = importedFormatDateToPolish;
+const parseUserDateToISO = importedParseUserDateToISO;
+
         // Constants and shared state
         const STORAGE_KEYS = {
             PIN: 'budget_pin',
@@ -12,13 +42,6 @@
         const ADMIN_SUCCESS_DEFAULT_MESSAGE = 'PIN został pomyślnie zmieniony!';
         const MAX_TEXT_LENGTH = 120;
         const CLIENT_DEPRECATED_PIN_VALUE = '__deprecated__';
-        const PLN_CURRENCY_FORMATTER = new Intl.NumberFormat('pl-PL', {
-            style: 'currency',
-            currency: 'PLN',
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        });
-        const DATE_UTILS = window.BudgetDateUtils || {};
 
         const EXPENSE_CATEGORY_OPTIONS = [
             { value: 'jedzenie', label: '🍽️ Jedzenie', icon: '🍽️' },
@@ -52,7 +75,6 @@
         let savePending = false;
         let expenseAnalysisRequestId = 0;
         let incomeAnalysisRequestId = 0;
-        let deferredInstallPrompt = null;
         let appState = {
             pin: CLIENT_DEPRECATED_PIN_VALUE,
             version: 1,
@@ -253,67 +275,12 @@
         }
 
         // PWA install and service worker
-        function isAndroidMobile() {
-            return /Android/i.test(navigator.userAgent || '');
-        }
-
-        function isStandaloneMode() {
-            return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-        }
-
-        function updateInstallButtonVisibility() {
-            const installButton = document.getElementById('installAppBtn');
-            const mainAppVisible = !document.getElementById('mainApp').classList.contains('hidden');
-            const shouldShow = Boolean(
-                installButton &&
-                mainAppVisible &&
-                isAndroidMobile() &&
-                !isStandaloneMode() &&
-                deferredInstallPrompt
-            );
-            installButton.classList.toggle('visible', shouldShow);
-        }
-
-        function setupPwaInstallPrompt() {
-            window.addEventListener('beforeinstallprompt', event => {
-                event.preventDefault();
-                deferredInstallPrompt = event;
-                updateInstallButtonVisibility();
-            });
-
-            window.addEventListener('appinstalled', () => {
-                deferredInstallPrompt = null;
-                updateInstallButtonVisibility();
-            });
-        }
-
-        async function installApp() {
-            if (!deferredInstallPrompt) {
-                showToast('Aby dodać aplikację, użyj menu Chrome i wybierz "Dodaj do ekranu głównego".', 'info');
-                return;
-            }
-
-            deferredInstallPrompt.prompt();
-            try {
-                await deferredInstallPrompt.userChoice;
-            } catch (error) {
-                console.error('Prompt instalacji został anulowany:', error);
-            }
-            deferredInstallPrompt = null;
-            updateInstallButtonVisibility();
-        }
-
-        function registerServiceWorker() {
-            if (!('serviceWorker' in navigator)) {
-                return;
-            }
-
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/service-worker.js').catch(error => {
-                    console.error('Nie udało się zarejestrować service worker:', error);
-                });
-            });
-        }
+        const {
+            updateInstallButtonVisibility,
+            setupPwaInstallPrompt,
+            installApp,
+            registerServiceWorker
+        } = createPwaController({ showToast });
 
         // Auth/session UI flow
         function showLoginScreen() {
@@ -1046,86 +1013,6 @@
         }
 
         // Formatting and utility helpers
-        function parseDateString(dateString) {
-            if (typeof DATE_UTILS.parseDateString === 'function') {
-                return DATE_UTILS.parseDateString(dateString);
-            }
-            return new Date(NaN);
-        }
-
-        function formatDateString(date) {
-            if (typeof DATE_UTILS.formatDateString === 'function') {
-                return DATE_UTILS.formatDateString(date);
-            }
-            return '';
-        }
-
-        function roundCurrency(value) {
-            return Math.round((Number(value) || 0) * 100) / 100;
-        }
-
-        function formatCurrencyPLN(value) {
-            return PLN_CURRENCY_FORMATTER.format(roundCurrency(value));
-        }
-
-        function formatExpenseAmountPLN(value) {
-            return `-${formatCurrencyPLN(Math.abs(Number(value) || 0))}`;
-        }
-
-        function formatIncomeAmountPLN(value) {
-            return `+${formatCurrencyPLN(Math.abs(Number(value) || 0))}`;
-        }
-
-        function ensureToastContainer() {
-            let container = document.getElementById('toastContainer');
-            if (container) {
-                return container;
-            }
-
-            container = document.createElement('div');
-            container.id = 'toastContainer';
-            container.className = 'toast-container';
-            container.setAttribute('aria-live', 'polite');
-            container.setAttribute('aria-atomic', 'false');
-            document.body.appendChild(container);
-            return container;
-        }
-
-        function showToast(message, type = 'info', durationMs = 4200) {
-            const normalizedMessage = String(message || '').trim();
-            if (!normalizedMessage) {
-                return;
-            }
-
-            const allowedTypes = new Set(['info', 'success', 'warning', 'error']);
-            const toastType = allowedTypes.has(type) ? type : 'info';
-            const container = ensureToastContainer();
-            const toast = document.createElement('div');
-            toast.className = `toast toast--${toastType}`;
-            toast.setAttribute('role', toastType === 'error' ? 'alert' : 'status');
-            toast.textContent = normalizedMessage;
-            container.appendChild(toast);
-
-            requestAnimationFrame(() => {
-                toast.classList.add('show');
-            });
-
-            const removeToast = () => {
-                if (!toast.isConnected) {
-                    return;
-                }
-                toast.classList.remove('show');
-                toast.classList.add('hide');
-                setTimeout(() => {
-                    if (toast.isConnected) {
-                        toast.remove();
-                    }
-                }, 220);
-            };
-
-            setTimeout(removeToast, Math.max(1500, Number(durationMs) || 0));
-        }
-
         function getCategoryIcon(category, entryType) {
             const normalized = (category || '').toLowerCase();
             const expenseIcons = {
@@ -1272,20 +1159,6 @@
             if (document.getElementById('incomeAnalysisModal').classList.contains('active')) {
                 renderIncomeAnalysis();
             }
-        }
-
-        function formatDateToPolish(dateString) {
-            if (typeof DATE_UTILS.formatDateToPolish === 'function') {
-                return DATE_UTILS.formatDateToPolish(dateString);
-            }
-            return '';
-        }
-
-        function parseUserDateToISO(inputValue) {
-            if (typeof DATE_UTILS.parseUserDateToISO === 'function') {
-                return DATE_UTILS.parseUserDateToISO(inputValue);
-            }
-            return null;
         }
 
         function normalizeUserText(value, maxLength = MAX_TEXT_LENGTH) {
@@ -2794,6 +2667,53 @@
                 errorElement.style.display = 'block';
             }
         }
+
+        const publicActions = {
+            login,
+            logout,
+            changeViewMonth,
+            goToCurrentMonth,
+            openAdminPanel,
+            closeAdminPanel,
+            openExpenseAnalysisModal,
+            closeExpenseAnalysisModal,
+            openIncomeAnalysisModal,
+            closeIncomeAnalysisModal,
+            openIncomeAnalysisFromExpense,
+            renderExpenseAnalysis,
+            renderIncomeAnalysis,
+            toggleExpenseDetails,
+            closeExpenseEditModal,
+            saveExpenseAmountFromAnalysis,
+            editExpenseAmountFromAnalysis,
+            openBalanceModal,
+            closeBalanceModal,
+            updateBalance,
+            closeBalanceCategoryModal,
+            addBalanceCategoryRow,
+            removeBalanceCategoryRow,
+            cancelBalanceCategory,
+            confirmBalanceCategory,
+            openIncomeModal,
+            closeIncomeModal,
+            openPaymentModal,
+            closePaymentModal,
+            formatDateInput,
+            normalizeDateInput,
+            selectIncomeFrequency,
+            selectPaymentFrequency,
+            toggleMonth,
+            deleteIncomeFromModal,
+            deletePaymentFromModal,
+            saveIncome,
+            savePayment,
+            changePin,
+            downloadBackup,
+            restoreBackup,
+            installApp
+        };
+
+        Object.assign(window, publicActions);
 
         // Bootstrapping
         document.getElementById('pin4').addEventListener('keypress', function(e) {

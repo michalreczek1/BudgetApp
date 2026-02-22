@@ -1,10 +1,10 @@
-const assert = require('node:assert/strict');
-const {
+import assert from 'node:assert/strict';
+import {
   parseDateString,
   formatDateString,
   formatDateToPolish,
   parseUserDateToISO
-} = require('../date-utils.js');
+} from '../date-utils.js';
 
 function isInvalidDate(date) {
   return !(date instanceof Date) || Number.isNaN(date.getTime());
