@@ -1,6 +1,7 @@
 const PLN_CURRENCY_FORMATTER = new Intl.NumberFormat('pl-PL', {
     style: 'currency',
     currency: 'PLN',
+    useGrouping: 'always',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
 });
