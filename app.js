@@ -15,6 +15,7 @@ import { createPwaController } from './js/pwa.js';
 import { createAdminController } from './js/admin.js';
 import { createRenderController } from './js/render.js';
 import { createAnalysisController } from './js/analysis.js';
+import { createUiModalsController } from './js/ui-modals.js';
 import {
     apiFetchState,
     apiSaveState,
@@ -901,64 +902,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
             updateCalculations();
         }
 
-        // Modal state and frequency selectors
-        function openIncomeModal() {
-            editingIncomeId = null;
-            setIncomeModalMode(false);
-            resetIncomeForm();
-            document.getElementById('incomeModal').classList.add('active');
-        }
-
-        function closeIncomeModal() {
-            document.getElementById('incomeModal').classList.remove('active');
-            editingIncomeId = null;
-            setIncomeModalMode(false);
-            resetIncomeForm();
-        }
-
-        function setIncomeModalMode(isEdit) {
-            document.getElementById('incomeModalTitle').textContent = isEdit ? '💵 Edytuj wpływ' : '💵 Dodaj wpływ';
-            document.getElementById('incomeSubmitBtn').textContent = isEdit ? 'Zapisz' : 'Dodaj';
-            document.getElementById('incomeDeleteBtn').classList.toggle('hidden', !isEdit);
-            document.getElementById('incomeDeleteBtn').textContent = isEdit && selectedIncomeFrequency !== 'once' ? 'Usuń serię' : 'Usuń';
-        }
-
-        function resetIncomeForm() {
-            document.getElementById('incomeName').value = '';
-            document.getElementById('incomeAmount').value = '';
-            document.getElementById('incomeDate').value = '';
-            selectIncomeFrequency('once');
-        }
-
-        function openPaymentModal() {
-            editingPaymentId = null;
-            setPaymentModalMode(false);
-            resetPaymentForm();
-            document.getElementById('paymentModal').classList.add('active');
-        }
-
-        function closePaymentModal() {
-            document.getElementById('paymentModal').classList.remove('active');
-            editingPaymentId = null;
-            setPaymentModalMode(false);
-            resetPaymentForm();
-        }
-
-        function setPaymentModalMode(isEdit) {
-            document.getElementById('paymentModalTitle').textContent = isEdit ? '➕ Edytuj płatność' : '➕ Dodaj płatność';
-            document.getElementById('paymentSubmitBtn').textContent = isEdit ? 'Zapisz' : 'Dodaj';
-            document.getElementById('paymentDeleteBtn').classList.toggle('hidden', !isEdit);
-            document.getElementById('paymentDeleteBtn').textContent = isEdit && selectedPaymentFrequency !== 'once' ? 'Usuń serię' : 'Usuń';
-        }
-
-        function resetPaymentForm() {
-            document.getElementById('paymentName').value = '';
-            document.getElementById('paymentAmount').value = '';
-            document.getElementById('paymentDate').value = '';
-            selectedMonths = [];
-            syncMonthButtons();
-            selectPaymentFrequency('once');
-        }
+        // Modal state and frequency selectors (provided by controller)
 
         const {
             openAdminPanel,
@@ -982,50 +926,41 @@ const parseUserDateToISO = importedParseUserDateToISO;
             }
         });
 
-        function selectPaymentFrequency(freq) {
-            selectedPaymentFrequency = freq;
-            const options = document.querySelectorAll('#paymentModal .radio-option');
-            options.forEach(opt => opt.classList.remove('selected'));
-            
-            if (freq === 'once') options[0].classList.add('selected');
-            else if (freq === 'monthly') options[1].classList.add('selected');
-            else if (freq === 'selected') options[2].classList.add('selected');
-
-            document.getElementById('monthSelectorGroup').classList.toggle('hidden', freq !== 'selected');
-            if (editingPaymentId !== null) {
-                document.getElementById('paymentDeleteBtn').textContent = freq !== 'once' ? 'Usuń serię' : 'Usuń';
+        const {
+            openIncomeModal,
+            closeIncomeModal,
+            setIncomeModalMode,
+            resetIncomeForm,
+            openPaymentModal,
+            closePaymentModal,
+            setPaymentModalMode,
+            resetPaymentForm,
+            selectPaymentFrequency,
+            selectIncomeFrequency,
+            toggleMonth,
+            syncMonthButtons
+        } = createUiModalsController({
+            getEditingIncomeId: () => editingIncomeId,
+            setEditingIncomeId: nextValue => {
+                editingIncomeId = nextValue;
+            },
+            getEditingPaymentId: () => editingPaymentId,
+            setEditingPaymentId: nextValue => {
+                editingPaymentId = nextValue;
+            },
+            getSelectedIncomeFrequency: () => selectedIncomeFrequency,
+            setSelectedIncomeFrequency: nextValue => {
+                selectedIncomeFrequency = nextValue;
+            },
+            getSelectedPaymentFrequency: () => selectedPaymentFrequency,
+            setSelectedPaymentFrequency: nextValue => {
+                selectedPaymentFrequency = nextValue;
+            },
+            getSelectedMonths: () => selectedMonths,
+            setSelectedMonths: nextValue => {
+                selectedMonths = Array.isArray(nextValue) ? nextValue : [];
             }
-        }
-
-        function selectIncomeFrequency(freq) {
-            selectedIncomeFrequency = freq;
-            const options = document.querySelectorAll('#incomeModal .radio-option');
-            options.forEach(opt => opt.classList.remove('selected'));
-            
-            if (freq === 'once') options[0].classList.add('selected');
-            else if (freq === 'monthly') options[1].classList.add('selected');
-            if (editingIncomeId !== null) {
-                document.getElementById('incomeDeleteBtn').textContent = freq !== 'once' ? 'Usuń serię' : 'Usuń';
-            }
-        }
-
-        function toggleMonth(month) {
-            const idx = selectedMonths.indexOf(month);
-            if (idx > -1) {
-                selectedMonths.splice(idx, 1);
-            } else {
-                selectedMonths.push(month);
-            }
-
-            syncMonthButtons();
-        }
-
-        function syncMonthButtons() {
-            const monthBtns = document.querySelectorAll('.month-btn');
-            monthBtns.forEach((btn, index) => {
-                btn.classList.toggle('selected', selectedMonths.includes(index + 1));
-            });
-        }
+        });
 
         // Formatting and utility helpers
         function getCategoryIcon(category, entryType) {

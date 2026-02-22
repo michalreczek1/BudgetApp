@@ -87,8 +87,10 @@ STATIC_FILE_WHITELIST = {
     "/js/admin.js": "js/admin.js",
     "/js/render.js": "js/render.js",
     "/js/analysis.js": "js/analysis.js",
+    "/js/ui-modals.js": "js/ui-modals.js",
     "/service-worker.js": "service-worker.js",
     "/manifest.webmanifest": "manifest.webmanifest",
+    "/newicon.jpg": "newicon.jpg",
     "/icon-192.png": "icon-192.png",
     "/icon-512.png": "icon-512.png",
 }
