@@ -1,3 +1,4 @@
+        // Constants and shared state
         const STORAGE_KEYS = {
             PIN: 'budget_pin',
             BALANCE: 'budget_balance',
@@ -64,6 +65,7 @@
             incomeCategoryTotals: {}
         };
 
+        // State sanitization and migration
         function sanitizeState(rawState) {
             const version = Number(rawState && rawState.version);
             const balance = Number(rawState && rawState.balance);
@@ -176,6 +178,7 @@
             }
         }
 
+        // API: state and auth
         async function fetchStateFromServer() {
             const response = await fetch('/api/state', {
                 method: 'GET',
@@ -249,6 +252,7 @@
             return response.json();
         }
 
+        // PWA install and service worker
         function isAndroidMobile() {
             return /Android/i.test(navigator.userAgent || '');
         }
@@ -311,6 +315,7 @@
             });
         }
 
+        // Auth/session UI flow
         function showLoginScreen() {
             document.getElementById('mainApp').classList.add('hidden');
             document.getElementById('loginScreen').classList.remove('hidden');
@@ -429,6 +434,7 @@
             }, 200);
         }
 
+        // Storage adapter (legacy localStorage-like API over appState)
         const appStorage = {
             getItem(key) {
                 if (key === STORAGE_KEYS.PIN) {
@@ -511,6 +517,7 @@
             }
         };
 
+        // App initialization and login/logout
         async function initializeStorage() {
             try {
                 const authStatus = await fetchAuthStatus();
@@ -643,6 +650,7 @@
         }
 
         // Modal Functions
+        // Balance update flow and category split modal
         function openBalanceModal() {
             document.getElementById('balanceModal').classList.add('active');
             const current = parseFloat(appStorage.getItem(STORAGE_KEYS.BALANCE)) || 0;
@@ -918,6 +926,7 @@
             updateCalculations();
         }
 
+        // Modal state and frequency selectors
         function openIncomeModal() {
             editingIncomeId = null;
             setIncomeModalMode(false);
@@ -1036,6 +1045,7 @@
             });
         }
 
+        // Formatting and utility helpers
         function parseDateString(dateString) {
             if (typeof DATE_UTILS.parseDateString === 'function') {
                 return DATE_UTILS.parseDateString(dateString);
@@ -1331,6 +1341,7 @@
             return normalizeDate(new Date(year, monthIndex, day));
         }
 
+        // Scheduling, occurrences, and settlement helpers
         function isOccurrencePaid(payment, occurrenceDateString) {
             return Array.isArray(payment.paidDates) && payment.paidDates.includes(occurrenceDateString);
         }
@@ -1575,6 +1586,7 @@
             return dueOccurrences;
         }
 
+        // Server settlement actions
         async function runServerSettlement(reason) {
             const response = await fetch('/api/settlements/run', {
                 method: 'POST',
@@ -1622,6 +1634,7 @@
             }
         }
 
+        // Calendar navigation and analysis views
         function updateViewMonthLabel() {
             const labelElement = document.getElementById('currentViewMonth');
             const labelButton = document.getElementById('monthLabelBtn');
@@ -2080,6 +2093,7 @@
             `;
         }
 
+        // Core CRUD, rendering, and calculations
         function startNoonWatcher() {
             return;
         }
@@ -2586,6 +2600,7 @@
             }
         }
 
+        // Admin actions: backup and PIN
         async function downloadBackup() {
             const errorElement = document.getElementById('adminError');
             const successElement = document.getElementById('adminSuccess');
@@ -2780,6 +2795,7 @@
             }
         }
 
+        // Bootstrapping
         document.getElementById('pin4').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 login();
