@@ -10,6 +10,12 @@
         };
         const ADMIN_SUCCESS_DEFAULT_MESSAGE = 'PIN został pomyślnie zmieniony!';
         const MAX_TEXT_LENGTH = 120;
+        const PLN_CURRENCY_FORMATTER = new Intl.NumberFormat('pl-PL', {
+            style: 'currency',
+            currency: 'PLN',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
 
         const EXPENSE_CATEGORY_OPTIONS = [
             { value: 'jedzenie', label: '🍽️ Jedzenie', icon: '🍽️' },
@@ -279,7 +285,7 @@
 
         async function installApp() {
             if (!deferredInstallPrompt) {
-                alert('Aby dodać aplikację, użyj menu Chrome i wybierz "Dodaj do ekranu głównego".');
+                showToast('Aby dodać aplikację, użyj menu Chrome i wybierz "Dodaj do ekranu głównego".', 'info');
                 return;
             }
 
@@ -365,7 +371,7 @@
                         if (document.getElementById('incomeAnalysisModal').classList.contains('active')) {
                             renderIncomeAnalysis();
                         }
-                        alert('Wykryto błąd walidacji lub wersji danych. Stan został odświeżony z serwera.');
+                        showToast('Wykryto błąd walidacji lub wersji danych. Stan został odświeżony z serwera.', 'warning', 5000);
                     } catch (refreshError) {
                         if (refreshError?.status === 401) {
                             handleUnauthorizedSession('Sesja wygasła. Zaloguj się ponownie.');
@@ -377,7 +383,7 @@
                     return;
                 }
                 if (error?.status === 409 && error?.details?.error === 'state_conflict') {
-                    alert('Dane zostały zmienione w innej sesji. Odświeżono aktualny stan z serwera.');
+                    showToast('Dane zostały zmienione w innej sesji. Odświeżono aktualny stan z serwera.', 'warning', 5000);
                     try {
                         await fetchStateFromServer();
                         loadData();
@@ -511,7 +517,7 @@
                 isAuthenticated = authStatus?.authenticated === true;
             } catch (error) {
                 console.error('Nie udało się sprawdzić statusu autoryzacji:', error);
-                alert('Brak połączenia z API. Uruchom serwer aplikacji (server.py).');
+                showToast('Brak połączenia z API. Uruchom serwer aplikacji (server.py).', 'error', 6000);
                 isAuthenticated = false;
             }
 
@@ -783,8 +789,8 @@
                 ? '🧾 Kategoria wydatku'
                 : '💵 Kategoria wpływu';
             const prompt = changeType === 'expense'
-                ? `Saldo zmniejszyło się o ${amount.toFixed(2)} zł. Podziel kwotę na kategorie. Pozycja 1 wylicza się automatycznie.`
-                : `Saldo zwiększyło się o ${amount.toFixed(2)} zł. Podziel kwotę na kategorie. Pozycja 1 wylicza się automatycznie.`;
+                ? `Saldo zmniejszyło się o ${formatCurrencyPLN(amount)}. Podziel kwotę na kategorie. Pozycja 1 wylicza się automatycznie.`
+                : `Saldo zwiększyło się o ${formatCurrencyPLN(amount)}. Podziel kwotę na kategorie. Pozycja 1 wylicza się automatycznie.`;
 
             document.getElementById('balanceCategoryTitle').textContent = title;
             document.getElementById('balanceCategoryInfo').textContent = prompt;
@@ -810,7 +816,7 @@
 
         function confirmBalanceCategory() {
             if (!pendingBalanceCategoryChange) {
-                alert('Brak danych zmiany salda');
+                showToast('Brak danych zmiany salda', 'error');
                 return;
             }
 
@@ -818,7 +824,7 @@
 
             const rows = Array.from(document.querySelectorAll('#balanceCategorySplitList .balance-split-row'));
             if (rows.length === 0) {
-                alert('Dodaj co najmniej jedną kategorię');
+                showToast('Dodaj co najmniej jedną kategorię', 'warning');
                 return;
             }
 
@@ -834,7 +840,7 @@
 
                 const parsed = Number(rawValue);
                 if (!Number.isFinite(parsed) || parsed <= 0) {
-                    alert(`Podaj poprawną kwotę w pozycji ${index + 1}`);
+                    showToast(`Podaj poprawną kwotę w pozycji ${index + 1}`, 'warning');
                     amountInput.focus();
                     return;
                 }
@@ -847,7 +853,7 @@
             const totalAmount = roundCurrency(pendingBalanceCategoryChange.amount);
             const firstAmount = roundCurrency(totalAmount - additionalTotal);
             if (firstAmount < 0) {
-                alert('Suma dodatkowych kategorii przekracza całą różnicę.');
+                showToast('Suma dodatkowych kategorii przekracza całą różnicę.', 'warning');
                 return;
             }
 
@@ -867,7 +873,7 @@
                 if (finalCategory === 'inne') {
                     const otherInput = normalizeUserText(row.querySelector('.balance-split-other').value);
                     if (!otherInput) {
-                        alert(`Wpisz nazwę kategorii "inne" w pozycji ${index + 1}`);
+                        showToast(`Wpisz nazwę kategorii "inne" w pozycji ${index + 1}`, 'warning');
                         row.querySelector('.balance-split-other').focus();
                         return;
                     }
@@ -881,7 +887,7 @@
             }
 
             if (allocations.length === 0) {
-                alert('Brak kwot do zapisania. Uzupełnij podział kategorii.');
+                showToast('Brak kwot do zapisania. Uzupełnij podział kategorii.', 'warning');
                 return;
             }
 
@@ -1073,6 +1079,68 @@
 
         function roundCurrency(value) {
             return Math.round((Number(value) || 0) * 100) / 100;
+        }
+
+        function formatCurrencyPLN(value) {
+            return PLN_CURRENCY_FORMATTER.format(roundCurrency(value));
+        }
+
+        function formatExpenseAmountPLN(value) {
+            return `-${formatCurrencyPLN(Math.abs(Number(value) || 0))}`;
+        }
+
+        function formatIncomeAmountPLN(value) {
+            return `+${formatCurrencyPLN(Math.abs(Number(value) || 0))}`;
+        }
+
+        function ensureToastContainer() {
+            let container = document.getElementById('toastContainer');
+            if (container) {
+                return container;
+            }
+
+            container = document.createElement('div');
+            container.id = 'toastContainer';
+            container.className = 'toast-container';
+            container.setAttribute('aria-live', 'polite');
+            container.setAttribute('aria-atomic', 'false');
+            document.body.appendChild(container);
+            return container;
+        }
+
+        function showToast(message, type = 'info', durationMs = 4200) {
+            const normalizedMessage = String(message || '').trim();
+            if (!normalizedMessage) {
+                return;
+            }
+
+            const allowedTypes = new Set(['info', 'success', 'warning', 'error']);
+            const toastType = allowedTypes.has(type) ? type : 'info';
+            const container = ensureToastContainer();
+            const toast = document.createElement('div');
+            toast.className = `toast toast--${toastType}`;
+            toast.setAttribute('role', toastType === 'error' ? 'alert' : 'status');
+            toast.textContent = normalizedMessage;
+            container.appendChild(toast);
+
+            requestAnimationFrame(() => {
+                toast.classList.add('show');
+            });
+
+            const removeToast = () => {
+                if (!toast.isConnected) {
+                    return;
+                }
+                toast.classList.remove('show');
+                toast.classList.add('hide');
+                setTimeout(() => {
+                    if (toast.isConnected) {
+                        toast.remove();
+                    }
+                }, 220);
+            };
+
+            setTimeout(removeToast, Math.max(1500, Number(durationMs) || 0));
         }
 
         function getCategoryIcon(category, entryType) {
@@ -1579,7 +1647,7 @@
                 loadData();
             } catch (error) {
                 console.error('Błąd księgowania płatności po stronie serwera:', error);
-                alert('Nie udało się oznaczyć płatności jako opłaconej.');
+                showToast('Nie udało się oznaczyć płatności jako opłaconej.', 'error');
             }
         }
 
@@ -1589,7 +1657,7 @@
                 loadData();
             } catch (error) {
                 console.error('Błąd księgowania wpływu po stronie serwera:', error);
-                alert('Nie udało się oznaczyć wpływu jako zaksięgowanego.');
+                showToast('Nie udało się oznaczyć wpływu jako zaksięgowanego.', 'error');
             }
         }
 
@@ -1715,14 +1783,14 @@
         async function editExpenseAmountFromAnalysis(entryId) {
             const normalizedId = Number(entryId);
             if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
-                alert('Nie udało się odczytać identyfikatora wydatku.');
+                showToast('Nie udało się odczytać identyfikatora wydatku.', 'error');
                 return;
             }
 
             const entries = parseStoredJSON(STORAGE_KEYS.EXPENSE_ENTRIES, []);
             const entryIndex = entries.findIndex(entry => Number(entry.id) === normalizedId);
             if (entryIndex === -1) {
-                alert('Nie znaleziono wydatku. Odśwież analizę i spróbuj ponownie.');
+                showToast('Nie znaleziono wydatku. Odśwież analizę i spróbuj ponownie.', 'warning');
                 await renderExpenseAnalysis();
                 return;
             }
@@ -1738,7 +1806,7 @@
 
         async function saveExpenseAmountFromAnalysis() {
             if (!Number.isInteger(editingExpenseEntryId) || editingExpenseEntryId <= 0) {
-                alert('Nie wybrano wydatku do edycji.');
+                showToast('Nie wybrano wydatku do edycji.', 'warning');
                 return;
             }
 
@@ -1746,7 +1814,7 @@
             const parsedAmount = Number(String(rawValue).replace(',', '.').trim());
             const newAmount = roundCurrency(parsedAmount);
             if (!Number.isFinite(newAmount) || newAmount <= 0) {
-                alert('Podaj poprawną kwotę większą od zera.');
+                showToast('Podaj poprawną kwotę większą od zera.', 'warning');
                 return;
             }
 
@@ -1754,7 +1822,7 @@
             const entryIndex = entries.findIndex(entry => Number(entry.id) === editingExpenseEntryId);
             if (entryIndex === -1) {
                 closeExpenseEditModal();
-                alert('Nie znaleziono wydatku. Odśwież analizę i spróbuj ponownie.');
+                showToast('Nie znaleziono wydatku. Odśwież analizę i spróbuj ponownie.', 'warning');
                 await renderExpenseAnalysis();
                 return;
             }
@@ -1883,7 +1951,7 @@
                     <div class="analysis-category-card">
                         <div class="analysis-category-header">
                             <span>${icon} ${escapeHtml(category)}</span>
-                            <span class="analysis-category-total">-${roundCurrency(total).toFixed(2)} zł</span>
+                            <span class="analysis-category-total">${formatExpenseAmountPLN(total)}</span>
                         </div>
                     </div>
                 `;
@@ -1927,7 +1995,7 @@
                                     onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); editExpenseAmountFromAnalysis(${Number(entry.id)}); }"
                                 >
                                     <div>${formatEntryDate(entry.date)}</div>
-                                    <div class="analysis-entry-amount-expense">-${roundCurrency(entry.amount).toFixed(2)} zł</div>
+                                    <div class="analysis-entry-amount-expense">${formatExpenseAmountPLN(entry.amount)}</div>
                                 </div>
                             `).join('')}
                         </div>
@@ -1937,7 +2005,7 @@
                 <div class="analysis-category-card">
                     <div class="analysis-category-header">
                         <span>🧮 Suma wydatków</span>
-                        <span class="analysis-category-total">-${totalExpenses.toFixed(2)} zł</span>
+                        <span class="analysis-category-total">${formatExpenseAmountPLN(totalExpenses)}</span>
                     </div>
                 </div>
             `;
@@ -2026,7 +2094,7 @@
                     <div class="analysis-category-card">
                         <div class="analysis-category-header">
                             <span>${icon} ${escapeHtml(category)}</span>
-                            <span class="analysis-category-total analysis-income-total">+${roundCurrency(total).toFixed(2)} zł</span>
+                            <span class="analysis-category-total analysis-income-total">${formatIncomeAmountPLN(total)}</span>
                         </div>
                         <div class="analysis-entry-list">
                             ${categoryEntries.map(entry => `
@@ -2035,7 +2103,7 @@
                                         <div>${escapeHtml(entry.name || category)}</div>
                                         <div class="analysis-entry-meta">${formatEntryDate(entry.date)}</div>
                                     </div>
-                                    <div class="analysis-entry-amount-income">+${roundCurrency(entry.amount).toFixed(2)} zł</div>
+                                    <div class="analysis-entry-amount-income">${formatIncomeAmountPLN(entry.amount)}</div>
                                 </div>
                             `).join('')}
                         </div>
@@ -2045,7 +2113,7 @@
                 <div class="analysis-category-card">
                     <div class="analysis-category-header">
                         <span>🧮 Suma wpływów</span>
-                        <span class="analysis-category-total analysis-income-total">+${totalIncome.toFixed(2)} zł</span>
+                        <span class="analysis-category-total analysis-income-total">${formatIncomeAmountPLN(totalIncome)}</span>
                     </div>
                 </div>
             `;
@@ -2096,13 +2164,13 @@
         function updateBalance() {
             const rawValue = document.getElementById('balanceInput').value.trim();
             if (!rawValue) {
-                alert('Podaj stan konta');
+                showToast('Podaj stan konta', 'warning');
                 return;
             }
 
             const newBalance = parseFloat(rawValue);
             if (Number.isNaN(newBalance)) {
-                alert('Podaj poprawną kwotę');
+                showToast('Podaj poprawną kwotę', 'warning');
                 return;
             }
 
@@ -2124,7 +2192,7 @@
 
         function loadBalance() {
             const balance = parseFloat(appStorage.getItem(STORAGE_KEYS.BALANCE)) || 0;
-            document.getElementById('currentBalance').textContent = balance.toFixed(2) + ' zł';
+            document.getElementById('currentBalance').textContent = formatCurrencyPLN(balance);
         }
 
         function saveIncome() {
@@ -2134,12 +2202,12 @@
             const date = parseUserDateToISO(rawDate);
 
             if (!name || Number.isNaN(amount) || !rawDate) {
-                alert('Wypełnij wszystkie pola');
+                showToast('Wypełnij wszystkie pola', 'warning');
                 return;
             }
 
             if (!date) {
-                alert('Podaj poprawną datę w formacie dd/mm/yyyy');
+                showToast('Podaj poprawną datę w formacie dd/mm/yyyy', 'warning');
                 return;
             }
 
@@ -2189,17 +2257,17 @@
             const date = parseUserDateToISO(rawDate);
 
             if (!name || Number.isNaN(amount) || !rawDate) {
-                alert('Wypełnij wszystkie pola');
+                showToast('Wypełnij wszystkie pola', 'warning');
                 return;
             }
 
             if (!date) {
-                alert('Podaj poprawną datę w formacie dd/mm/yyyy');
+                showToast('Podaj poprawną datę w formacie dd/mm/yyyy', 'warning');
                 return;
             }
 
             if (selectedPaymentFrequency === 'selected' && selectedMonths.length === 0) {
-                alert('Wybierz co najmniej jeden miesiąc');
+                showToast('Wybierz co najmniej jeden miesiąc', 'warning');
                 return;
             }
 
@@ -2335,7 +2403,7 @@
 
                     const amount = document.createElement('div');
                     amount.className = 'payment-amount income';
-                    amount.textContent = `+${Number(income.amount || 0).toFixed(2)} zł`;
+                    amount.textContent = formatIncomeAmountPLN(income.amount || 0);
                     row.appendChild(amount);
 
                     if (parseDateString(income.date) <= today) {
@@ -2440,7 +2508,7 @@
 
                 const amount = document.createElement('div');
                 amount.className = 'payment-amount expense';
-                amount.textContent = `-${Number(payment.amount || 0).toFixed(2)} zł`;
+                amount.textContent = formatExpenseAmountPLN(payment.amount || 0);
                 row.appendChild(amount);
 
                 if (parseDateString(payment.date) <= today) {
@@ -2546,7 +2614,7 @@
 
             const afterPayments = balance - totalPayments;
             const afterPaymentsElement = document.getElementById('afterPayments');
-            afterPaymentsElement.textContent = afterPayments.toFixed(2) + ' zł';
+            afterPaymentsElement.textContent = formatCurrencyPLN(afterPayments);
             
             if (afterPayments > 0) {
                 afterPaymentsElement.classList.add('positive');

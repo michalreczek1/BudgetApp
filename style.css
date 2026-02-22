@@ -31,6 +31,60 @@
                 radial-gradient(circle at 90% 80%, rgba(167, 139, 250, 0.08) 0%, transparent 50%);
         }
 
+        .toast-container {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            z-index: 5000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: min(380px, calc(100vw - 32px));
+            pointer-events: none;
+        }
+
+        .toast {
+            background: rgba(30, 42, 58, 0.96);
+            border: 1px solid var(--border-color);
+            border-left-width: 4px;
+            border-radius: 12px;
+            box-shadow: 0 12px 30px var(--shadow);
+            color: var(--text-primary);
+            padding: 12px 14px;
+            font-size: 0.92rem;
+            line-height: 1.35;
+            opacity: 0;
+            transform: translateY(-8px);
+            transition: opacity 0.18s ease, transform 0.18s ease;
+            pointer-events: auto;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .toast.hide {
+            opacity: 0;
+            transform: translateY(-8px);
+        }
+
+        .toast--info {
+            border-left-color: var(--accent-blue);
+        }
+
+        .toast--success {
+            border-left-color: var(--accent-green);
+        }
+
+        .toast--warning {
+            border-left-color: var(--accent-yellow);
+        }
+
+        .toast--error {
+            border-left-color: var(--accent-red);
+        }
+
         .container {
             max-width: 1200px;
             margin: 0 auto;
