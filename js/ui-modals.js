@@ -35,6 +35,10 @@ export function createUiModalsController({
     function resetIncomeForm() {
         document.getElementById('incomeName').value = '';
         document.getElementById('incomeAmount').value = '';
+        const incomeCategorySelect = document.getElementById('incomeCategory');
+        if (incomeCategorySelect) {
+            incomeCategorySelect.value = 'inne';
+        }
         document.getElementById('incomeDate').value = '';
         selectIncomeFrequency('once');
     }
