@@ -1097,6 +1097,82 @@ const parseUserDateToISO = importedParseUserDateToISO;
             }
 
             input.value = formatDateToPolish(isoDate);
+            syncNativeDatePickerFromTextInput(input);
+        }
+
+        function syncNativeDatePickerFromTextInput(textInput) {
+            if (!textInput) {
+                return;
+            }
+
+            const pickerId = textInput.dataset?.pickerId;
+            if (!pickerId) {
+                return;
+            }
+
+            const nativePicker = document.getElementById(pickerId);
+            if (!nativePicker) {
+                return;
+            }
+
+            const isoDate = parseUserDateToISO(textInput.value);
+            nativePicker.value = isoDate || '';
+        }
+
+        function applyNativeDatePickerToTextInput(textInput, nativePicker) {
+            if (!textInput || !nativePicker || !nativePicker.value) {
+                return;
+            }
+
+            textInput.value = formatDateToPolish(nativePicker.value);
+        }
+
+        function openDatePickerForTextInput(textInputId, nativePickerId) {
+            const textInput = document.getElementById(textInputId);
+            const nativePicker = document.getElementById(nativePickerId);
+            if (!textInput || !nativePicker) {
+                return;
+            }
+
+            syncNativeDatePickerFromTextInput(textInput);
+            try {
+                if (typeof nativePicker.showPicker === 'function') {
+                    nativePicker.showPicker();
+                    return;
+                }
+            } catch {
+                // Fallback below for browsers without showPicker support/permission
+            }
+
+            nativePicker.focus();
+            nativePicker.click();
+        }
+
+        function setupDatePickerControls() {
+            const pairs = [
+                {
+                    textInputId: 'incomeDate',
+                    buttonId: 'incomeDatePickerBtn',
+                    nativePickerId: 'incomeDateNative'
+                },
+                {
+                    textInputId: 'paymentDate',
+                    buttonId: 'paymentDatePickerBtn',
+                    nativePickerId: 'paymentDateNative'
+                }
+            ];
+
+            pairs.forEach(({ textInputId, buttonId, nativePickerId }) => {
+                const textInput = document.getElementById(textInputId);
+                const button = document.getElementById(buttonId);
+                const nativePicker = document.getElementById(nativePickerId);
+                if (!textInput || !button || !nativePicker) {
+                    return;
+                }
+
+                button.addEventListener('click', () => openDatePickerForTextInput(textInputId, nativePickerId));
+                nativePicker.addEventListener('change', () => applyNativeDatePickerToTextInput(textInput, nativePicker));
+            });
         }
 
         // Scheduling, occurrences, and settlement helpers (provided by module)
@@ -1484,6 +1560,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
             }
         });
 
+        setupDatePickerControls();
         setupPwaInstallPrompt();
         registerServiceWorker();
         initializeStorage();

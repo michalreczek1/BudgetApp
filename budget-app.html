@@ -273,7 +273,11 @@
 
             <div class="input-group">
                 <label>Data wpływu</label>
-                <input type="text" id="incomeDate" placeholder="np. 05/03/2026" inputmode="numeric" maxlength="10" oninput="formatDateInput(this)" onblur="normalizeDateInput(this)">
+                <div class="date-input-wrapper">
+                    <input type="text" id="incomeDate" data-picker-id="incomeDateNative" placeholder="np. 05/03/2026" inputmode="numeric" maxlength="10" oninput="formatDateInput(this)" onblur="normalizeDateInput(this)">
+                    <button type="button" class="date-picker-btn" id="incomeDatePickerBtn" aria-label="Wybierz datę z kalendarza" title="Wybierz datę">📅</button>
+                    <input type="date" id="incomeDateNative" class="native-date-proxy" tabindex="-1" aria-hidden="true">
+                </div>
             </div>
 
             <div class="input-group">
@@ -316,7 +320,11 @@
 
             <div class="input-group">
                 <label>Data płatności</label>
-                <input type="text" id="paymentDate" placeholder="np. 05/03/2026" inputmode="numeric" maxlength="10" oninput="formatDateInput(this)" onblur="normalizeDateInput(this)">
+                <div class="date-input-wrapper">
+                    <input type="text" id="paymentDate" data-picker-id="paymentDateNative" placeholder="np. 05/03/2026" inputmode="numeric" maxlength="10" oninput="formatDateInput(this)" onblur="normalizeDateInput(this)">
+                    <button type="button" class="date-picker-btn" id="paymentDatePickerBtn" aria-label="Wybierz datę z kalendarza" title="Wybierz datę">📅</button>
+                    <input type="date" id="paymentDateNative" class="native-date-proxy" tabindex="-1" aria-hidden="true">
+                </div>
             </div>
 
             <div class="input-group">

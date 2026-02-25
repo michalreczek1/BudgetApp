@@ -678,6 +678,50 @@
             background: var(--bg-card);
         }
 
+        .date-input-wrapper {
+            position: relative;
+        }
+
+        .date-input-wrapper > input[type="text"] {
+            padding-right: 52px;
+        }
+
+        .date-picker-btn {
+            position: absolute;
+            top: 50%;
+            right: 8px;
+            transform: translateY(-50%);
+            width: 36px;
+            height: 36px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-card);
+            color: var(--text-primary);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            line-height: 1;
+            transition: border-color 0.2s ease, background 0.2s ease;
+        }
+
+        .date-picker-btn:hover,
+        .date-picker-btn:focus-visible {
+            border-color: var(--accent-blue);
+            background: var(--bg-card-hover);
+            outline: none;
+        }
+
+        .native-date-proxy {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+            pointer-events: none;
+            inset: auto;
+        }
+
         .modal-actions {
             display: flex;
             gap: 12px;
