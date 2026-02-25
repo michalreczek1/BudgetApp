@@ -706,6 +706,11 @@ const parseUserDateToISO = importedParseUserDateToISO;
                 row.querySelector('.balance-split-amount').addEventListener('input', syncBalanceCategoryFirstRowAmount);
             }
 
+            const categorySelect = row.querySelector('.balance-split-category');
+            const onCategoryChange = () => handleBalanceCategorySelectChange(rowId);
+            categorySelect.addEventListener('change', onCategoryChange);
+            categorySelect.addEventListener('input', onCategoryChange);
+
             return row;
         }
 
