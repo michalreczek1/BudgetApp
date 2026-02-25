@@ -423,7 +423,7 @@ def validate_state_payload(payload):
             if entry_kind == "payment":
                 allowed_keys.update({"months", "paidDates"})
             else:
-                allowed_keys.update({"receivedDates"})
+                allowed_keys.update({"receivedDates", "category"})
             unknown = sorted(set(item.keys()) - allowed_keys)
             for key in unknown:
                 add_validation_error(errors, f"{prefix}.{key}", "Unknown field")
@@ -485,6 +485,10 @@ def validate_state_payload(payload):
                         add_validation_error(errors, f"{prefix}.receivedDates", "receivedDates must contain valid YYYY-MM-DD dates")
                     if len(normalized_received) != len(received_dates):
                         add_validation_error(errors, f"{prefix}.receivedDates", "receivedDates must contain unique dates")
+
+                category_text = str(item.get("category", "")).strip()
+                if category_text and len(category_text) > MAX_TEXT_LENGTH:
+                    add_validation_error(errors, f"{prefix}.category", f"Category max length is {MAX_TEXT_LENGTH}")
 
     def validate_history_entries(field_name, entries):
         if not isinstance(entries, list):
