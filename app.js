@@ -1446,6 +1446,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
             closeBalanceCategoryModal,
             addBalanceCategoryRow,
             removeBalanceCategoryRow,
+            handleBalanceCategorySelectChange,
             cancelBalanceCategory,
             confirmBalanceCategory,
             openIncomeModal,
