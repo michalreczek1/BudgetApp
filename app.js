@@ -10,6 +10,7 @@ import {
     formatExpenseAmountPLN,
     formatIncomeAmountPLN
 } from './js/formatters.js';
+import { CLIENT_DEPRECATED_PIN_VALUE, sanitizeState, isStateEffectivelyEmpty, buildCategoryTotals } from './js/state.js';
 import { showToast } from './js/toast.js';
 import { createPwaController } from './js/pwa.js';
 import { createAdminController } from './js/admin.js';
@@ -67,7 +68,6 @@ const parseUserDateToISO = importedParseUserDateToISO;
         };
         const ADMIN_SUCCESS_DEFAULT_MESSAGE = 'PIN został pomyślnie zmieniony!';
         const MAX_TEXT_LENGTH = 120;
-        const CLIENT_DEPRECATED_PIN_VALUE = '__deprecated__';
 
         const EXPENSE_CATEGORY_OPTIONS = [
             { value: 'jedzenie', label: '🍽️ Jedzenie', icon: '🍽️' },
@@ -108,77 +108,6 @@ const parseUserDateToISO = importedParseUserDateToISO;
             expenseCategoryTotals: {},
             incomeCategoryTotals: {}
         };
-
-        // State sanitization and migration
-        function sanitizeState(rawState) {
-            const version = Number(rawState && rawState.version);
-            const balance = Number(rawState && rawState.balance);
-            const sanitizeTotals = (rawTotals) => {
-                if (!rawTotals || typeof rawTotals !== 'object' || Array.isArray(rawTotals)) {
-                    return {};
-                }
-
-                const cleaned = {};
-                Object.entries(rawTotals).forEach(([category, value]) => {
-                    const parsed = Number(value);
-                    if (Number.isFinite(parsed)) {
-                        cleaned[String(category)] = Math.round(parsed * 100) / 100;
-                    }
-                });
-                return cleaned;
-            };
-
-            const sanitizeEntries = (rawEntries) => {
-                if (!Array.isArray(rawEntries)) {
-                    return [];
-                }
-
-                return rawEntries
-                    .filter(entry => entry && typeof entry === 'object')
-                    .map(entry => {
-                        const parsedAmount = Number(entry.amount);
-                        const amount = Number.isFinite(parsedAmount) ? Math.round(parsedAmount * 100) / 100 : 0;
-                        return {
-                            id: Number.isFinite(Number(entry.id)) ? Number(entry.id) : Date.now(),
-                            amount: amount,
-                            category: typeof entry.category === 'string' && entry.category.trim() ? entry.category.trim() : 'inne',
-                            date: typeof entry.date === 'string' && entry.date ? entry.date : formatDateString(new Date()),
-                            source: typeof entry.source === 'string' && entry.source ? entry.source : 'balance-update',
-                            name: typeof entry.name === 'string' ? entry.name : '',
-                            icon: typeof entry.icon === 'string' ? entry.icon : ''
-                        };
-                    });
-            };
-
-            return {
-                pin: CLIENT_DEPRECATED_PIN_VALUE,
-                version: Number.isFinite(version) && version > 0 ? Math.trunc(version) : 1,
-                balance: Number.isFinite(balance) ? balance : 0,
-                payments: Array.isArray(rawState?.payments) ? rawState.payments : [],
-                incomes: Array.isArray(rawState?.incomes) ? rawState.incomes : [],
-                expenseEntries: sanitizeEntries(rawState?.expenseEntries),
-                incomeEntries: sanitizeEntries(rawState?.incomeEntries),
-                expenseCategoryTotals: sanitizeTotals(rawState?.expenseCategoryTotals),
-                incomeCategoryTotals: sanitizeTotals(rawState?.incomeCategoryTotals)
-            };
-        }
-
-        function isStateEffectivelyEmpty(state) {
-            return (
-                Number(state.version) === 1 &&
-                Number(state.balance) === 0 &&
-                Array.isArray(state.payments) &&
-                state.payments.length === 0 &&
-                Array.isArray(state.incomes) &&
-                state.incomes.length === 0 &&
-                Array.isArray(state.expenseEntries) &&
-                state.expenseEntries.length === 0 &&
-                Array.isArray(state.incomeEntries) &&
-                state.incomeEntries.length === 0 &&
-                Object.keys(state.expenseCategoryTotals || {}).length === 0 &&
-                Object.keys(state.incomeCategoryTotals || {}).length === 0
-            );
-        }
 
         function migrateLegacyLocalStorageIfNeeded() {
             if (!isStateEffectivelyEmpty(appState)) {
@@ -536,6 +465,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
                     await fetchStateFromServer();
                 } catch (error) {
                     console.error('Nie udało się pobrać danych z API:', error);
+                    showToast('Nie udało się pobrać danych z API. Spróbuj ponownie później.', 'error', 6000);
                     isAuthenticated = false;
                 }
             }
@@ -752,8 +682,13 @@ const parseUserDateToISO = importedParseUserDateToISO;
 
             const select = row.querySelector('.balance-split-category');
             const otherInput = row.querySelector('.balance-split-other');
-            const isOther = select.value === 'inne';
+            if (!select || !otherInput) {
+                return;
+            }
+
+            const isOther = String(select.value || '').toLowerCase() === 'inne';
             otherInput.classList.toggle('hidden', !isOther);
+            otherInput.style.display = isOther ? 'block' : 'none';
             if (!isOther) {
                 otherInput.value = '';
                 return;
@@ -1087,15 +1022,6 @@ const parseUserDateToISO = importedParseUserDateToISO;
             return formatDateToPolish(dateString);
         }
 
-        function buildCategoryTotals(entries) {
-            const totals = {};
-            entries.forEach(entry => {
-                const category = entry.category || 'inne';
-                totals[category] = roundCurrency((totals[category] || 0) + (Number(entry.amount) || 0));
-            });
-            return totals;
-        }
-
         function ensureTrackingDataConsistency() {
             const expenseEntries = parseStoredJSON(STORAGE_KEYS.EXPENSE_ENTRIES, []);
             const incomeEntries = parseStoredJSON(STORAGE_KEYS.INCOME_ENTRIES, []);
@@ -1223,8 +1149,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
         }
 
         function openEditIncome(id) {
-            const stored = appStorage.getItem(STORAGE_KEYS.INCOMES);
-            const incomes = stored ? JSON.parse(stored) : [];
+            const incomes = parseStoredJSON(STORAGE_KEYS.INCOMES, []);
             const income = incomes.find(item => item.id === id);
 
             if (!income) {
@@ -1241,8 +1166,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
         }
 
         function openEditPayment(id) {
-            const stored = appStorage.getItem(STORAGE_KEYS.PAYMENTS);
-            const payments = stored ? JSON.parse(stored) : [];
+            const payments = parseStoredJSON(STORAGE_KEYS.PAYMENTS, []);
             const payment = payments.find(item => item.id === id);
 
             if (!payment) {
@@ -1289,55 +1213,103 @@ const parseUserDateToISO = importedParseUserDateToISO;
             openBalanceCategoryModal('income', difference, newBalance);
         }
 
-        function saveIncome() {
-            const name = normalizeUserText(document.getElementById('incomeName').value);
-            const amount = parseFloat(document.getElementById('incomeAmount').value);
-            const rawDate = document.getElementById('incomeDate').value;
-            const date = parseUserDateToISO(rawDate);
-
+        function validateEntryCommonFields({ name, amount, rawDate }) {
             if (!name || Number.isNaN(amount) || !rawDate) {
                 showToast('Wypełnij wszystkie pola', 'warning');
-                return;
+                return { ok: false, date: null };
             }
 
+            const date = parseUserDateToISO(rawDate);
             if (!date) {
                 showToast('Podaj poprawną datę w formacie dd/mm/yyyy', 'warning');
-                return;
+                return { ok: false, date: null };
             }
 
-            let incomes = [];
-            const stored = appStorage.getItem(STORAGE_KEYS.INCOMES);
-            if (stored) {
-                incomes = JSON.parse(stored);
+            return { ok: true, date };
+        }
+
+        function generateEntryId() {
+            return Date.now() + Math.floor(Math.random() * 1000);
+        }
+
+        function saveEntry({
+            type,
+            editingId,
+            nameInputId,
+            amountInputId,
+            dateInputId,
+            frequency,
+            selectedMonthsForPayments
+        }) {
+            const name = normalizeUserText(document.getElementById(nameInputId).value);
+            const amount = parseFloat(document.getElementById(amountInputId).value);
+            const rawDate = document.getElementById(dateInputId).value;
+
+            const { ok, date } = validateEntryCommonFields({ name, amount, rawDate });
+            if (!ok) {
+                return false;
             }
 
-            if (editingIncomeId !== null) {
-                incomes = incomes.map(income => {
-                    if (income.id !== editingIncomeId) {
-                        return income;
+            if (type === 'expense' && frequency === 'selected' && selectedMonthsForPayments.length === 0) {
+                showToast('Wybierz co najmniej jeden miesiąc', 'warning');
+                return false;
+            }
+
+            const storageKey = type === 'income' ? STORAGE_KEYS.INCOMES : STORAGE_KEYS.PAYMENTS;
+            const existingEntries = parseStoredJSON(storageKey, []);
+
+            let months = [];
+            if (type === 'expense' && frequency === 'selected') {
+                months = [...selectedMonthsForPayments].sort((a, b) => a - b);
+            }
+
+            const updatedEntries = editingId !== null
+                ? existingEntries.map(entry => {
+                    if (entry.id !== editingId) {
+                        return entry;
                     }
 
                     return {
-                        ...income,
-                        name: name,
-                        amount: amount,
-                        date: date,
-                        frequency: selectedIncomeFrequency,
-                        type: 'income'
+                        ...entry,
+                        name,
+                        amount,
+                        date,
+                        frequency,
+                        ...(type === 'expense' ? { months } : {}),
+                        type
                     };
-                });
-            } else {
-                incomes.push({
-                    id: Date.now(),
-                    name: name,
-                    amount: amount,
-                    date: date,
-                    frequency: selectedIncomeFrequency,
-                    type: 'income'
-                });
-            }
+                })
+                : [
+                    ...existingEntries,
+                    {
+                        id: generateEntryId(),
+                        name,
+                        amount,
+                        date,
+                        frequency,
+                        ...(type === 'expense' ? { months } : {}),
+                        type
+                    }
+                ];
 
-            appStorage.setItem(STORAGE_KEYS.INCOMES, JSON.stringify(incomes));
+            appStorage.setItem(storageKey, JSON.stringify(updatedEntries));
+            return true;
+        }
+
+        function saveIncome() {
+            const success = saveEntry({
+                type: 'income',
+                editingId: editingIncomeId,
+                nameInputId: 'incomeName',
+                amountInputId: 'incomeAmount',
+                dateInputId: 'incomeDate',
+                frequency: selectedIncomeFrequency,
+                selectedMonthsForPayments: []
+            });
+
+            if (!success) {
+                return;
+            }
 
             closeIncomeModal();
             loadIncomes();
@@ -1345,65 +1317,19 @@ const parseUserDateToISO = importedParseUserDateToISO;
         }
 
         function savePayment() {
-            const name = normalizeUserText(document.getElementById('paymentName').value);
-            const amount = parseFloat(document.getElementById('paymentAmount').value);
-            const rawDate = document.getElementById('paymentDate').value;
-            const date = parseUserDateToISO(rawDate);
+            const success = saveEntry({
+                type: 'expense',
+                editingId: editingPaymentId,
+                nameInputId: 'paymentName',
+                amountInputId: 'paymentAmount',
+                dateInputId: 'paymentDate',
+                frequency: selectedPaymentFrequency,
+                selectedMonthsForPayments: selectedMonths
+            });
 
-            if (!name || Number.isNaN(amount) || !rawDate) {
-                showToast('Wypełnij wszystkie pola', 'warning');
+            if (!success) {
                 return;
             }
-
-            if (!date) {
-                showToast('Podaj poprawną datę w formacie dd/mm/yyyy', 'warning');
-                return;
-            }
-
-            if (selectedPaymentFrequency === 'selected' && selectedMonths.length === 0) {
-                showToast('Wybierz co najmniej jeden miesiąc', 'warning');
-                return;
-            }
-
-            const months = selectedPaymentFrequency === 'selected'
-                ? [...selectedMonths].sort((a, b) => a - b)
-                : [];
-
-            let payments = [];
-            const stored = appStorage.getItem(STORAGE_KEYS.PAYMENTS);
-            if (stored) {
-                payments = JSON.parse(stored);
-            }
-
-            if (editingPaymentId !== null) {
-                payments = payments.map(payment => {
-                    if (payment.id !== editingPaymentId) {
-                        return payment;
-                    }
-
-                    return {
-                        ...payment,
-                        name: name,
-                        amount: amount,
-                        date: date,
-                        frequency: selectedPaymentFrequency,
-                        months: months,
-                        type: 'expense'
-                    };
-                });
-            } else {
-                payments.push({
-                    id: Date.now(),
-                    name: name,
-                    amount: amount,
-                    date: date,
-                    frequency: selectedPaymentFrequency,
-                    months: months,
-                    type: 'expense'
-                });
-            }
-
-            appStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
 
             closePaymentModal();
             loadPayments();
@@ -1479,6 +1405,40 @@ const parseUserDateToISO = importedParseUserDateToISO;
         });
 
         exposePublicActions(window);
+
+        // Global keyboard shortcuts for modals and forms
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                if (document.getElementById('incomeModal')?.classList.contains('active')) {
+                    closeIncomeModal();
+                }
+                if (document.getElementById('paymentModal')?.classList.contains('active')) {
+                    closePaymentModal();
+                }
+                if (document.getElementById('balanceModal')?.classList.contains('active')) {
+                    closeBalanceModal();
+                }
+                if (document.getElementById('balanceCategoryModal')?.classList.contains('active')) {
+                    closeBalanceCategoryModal();
+                }
+                if (document.getElementById('expenseAnalysisModal')?.classList.contains('active')) {
+                    closeExpenseAnalysisModal();
+                }
+                if (document.getElementById('incomeAnalysisModal')?.classList.contains('active')) {
+                    closeIncomeAnalysisModal();
+                }
+            }
+
+            if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                if (document.getElementById('incomeModal')?.classList.contains('active')) {
+                    e.preventDefault();
+                    saveIncome();
+                } else if (document.getElementById('paymentModal')?.classList.contains('active')) {
+                    e.preventDefault();
+                    savePayment();
+                }
+            }
+        });
 
         // Bootstrapping
         document.getElementById('pin4').addEventListener('keypress', function(e) {
