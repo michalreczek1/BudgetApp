@@ -236,6 +236,13 @@ def sanitize_income(income):
     if not is_iso_date(base_date):
         base_date = date.today().isoformat()
 
+    category = sanitize_text(
+        income.get("category", ""),
+        max_length=MAX_TEXT_LENGTH,
+        allow_empty=False,
+        default="inne",
+    )
+
     return {
         "id": income_id,
         "name": sanitize_text(income.get("name", ""), max_length=MAX_TEXT_LENGTH, allow_empty=False, default="Bez nazwy"),
@@ -244,6 +251,7 @@ def sanitize_income(income):
         "frequency": frequency,
         "receivedDates": normalize_date_list(income.get("receivedDates", [])),
         "type": "income",
+        "category": category,
     }
 
 

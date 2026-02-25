@@ -1161,6 +1161,12 @@ const parseUserDateToISO = importedParseUserDateToISO;
             document.getElementById('incomeName').value = income.name;
             document.getElementById('incomeAmount').value = income.amount;
             document.getElementById('incomeDate').value = formatDateToPolish(income.date);
+            const incomeCategorySelect = document.getElementById('incomeCategory');
+            if (incomeCategorySelect) {
+                const normalizedCategory = String(income.category || 'inne').toLowerCase();
+                const allowedCategories = ['premia', 'rodzice', 'inne'];
+                incomeCategorySelect.value = allowedCategories.includes(normalizedCategory) ? normalizedCategory : 'inne';
+            }
             selectIncomeFrequency(income.frequency || 'once');
             document.getElementById('incomeModal').classList.add('active');
         }
@@ -1239,7 +1245,8 @@ const parseUserDateToISO = importedParseUserDateToISO;
             amountInputId,
             dateInputId,
             frequency,
-            selectedMonthsForPayments
+            selectedMonthsForPayments,
+            incomeCategory
         }) {
             const name = normalizeUserText(document.getElementById(nameInputId).value);
             const amount = parseFloat(document.getElementById(amountInputId).value);
@@ -1269,7 +1276,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
                         return entry;
                     }
 
-                    return {
+                    const nextEntry = {
                         ...entry,
                         name,
                         amount,
@@ -1278,18 +1285,32 @@ const parseUserDateToISO = importedParseUserDateToISO;
                         ...(type === 'expense' ? { months } : {}),
                         type
                     };
+
+                    if (type === 'income') {
+                        nextEntry.category = incomeCategory || 'inne';
+                    }
+
+                    return nextEntry;
                 })
                 : [
                     ...existingEntries,
-                    {
-                        id: generateEntryId(),
-                        name,
-                        amount,
-                        date,
-                        frequency,
-                        ...(type === 'expense' ? { months } : {}),
-                        type
-                    }
+                    (() => {
+                        const baseEntry = {
+                            id: generateEntryId(),
+                            name,
+                            amount,
+                            date,
+                            frequency,
+                            ...(type === 'expense' ? { months } : {}),
+                            type
+                        };
+
+                        if (type === 'income') {
+                            baseEntry.category = incomeCategory || 'inne';
+                        }
+
+                        return baseEntry;
+                    })()
                 ];
 
             appStorage.setItem(storageKey, JSON.stringify(updatedEntries));
@@ -1297,6 +1318,21 @@ const parseUserDateToISO = importedParseUserDateToISO;
         }
 
         function saveIncome() {
+            const incomeCategorySelect = document.getElementById('incomeCategory');
+            const incomeCategoryValue = incomeCategorySelect
+                ? normalizeUserText(incomeCategorySelect.value).toLowerCase() || 'inne'
+                : 'inne';
+            const incomeNameInput = document.getElementById('incomeName');
+            if (incomeNameInput) {
+                const categoryLabel = incomeCategorySelect
+                    ? normalizeUserText(
+                        incomeCategorySelect.options[incomeCategorySelect.selectedIndex]?.textContent ||
+                        incomeCategoryValue
+                    )
+                    : incomeCategoryValue;
+                incomeNameInput.value = categoryLabel;
+            }
+
             const success = saveEntry({
                 type: 'income',
                 editingId: editingIncomeId,
@@ -1304,7 +1340,8 @@ const parseUserDateToISO = importedParseUserDateToISO;
                 amountInputId: 'incomeAmount',
                 dateInputId: 'incomeDate',
                 frequency: selectedIncomeFrequency,
-                selectedMonthsForPayments: []
+                selectedMonthsForPayments: [],
+                incomeCategory: incomeCategoryValue
             });
 
             if (!success) {
