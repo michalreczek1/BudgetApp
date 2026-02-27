@@ -175,17 +175,23 @@ export function createRenderController({
                 amount.textContent = formatIncomeAmountPLN(income.amount || 0);
                 row.appendChild(amount);
 
-                if (parseDateString(income.date) <= today) {
-                    const paidBtn = document.createElement('button');
-                    paidBtn.className = 'paid-btn';
-                    paidBtn.type = 'button';
-                    paidBtn.textContent = 'Zaksięgowano';
-                    paidBtn.addEventListener('click', event => {
-                        event.stopPropagation();
-                        markIncomeAsReceived(income.id, income.date);
-                    });
-                    row.appendChild(paidBtn);
-                }
+                const paidBtn = document.createElement('button');
+                paidBtn.className = 'paid-btn';
+                paidBtn.type = 'button';
+                paidBtn.textContent = 'Zaksięgowano';
+                paidBtn.addEventListener('click', event => {
+                    event.stopPropagation();
+                    const shouldSettle = confirm(
+                        `Zaksięgować wpływ "${normalizeUserText(income.name)}" na dziś?\n`
+                        + `Kwota: ${formatIncomeAmountPLN(income.amount || 0)}\n`
+                        + `Planowana data: ${formatDateToPolish(income.date)}`
+                    );
+                    if (!shouldSettle) {
+                        return;
+                    }
+                    markIncomeAsReceived(income.id, income.date);
+                });
+                row.appendChild(paidBtn);
 
                 listElement.appendChild(row);
             });
@@ -208,7 +214,6 @@ export function createRenderController({
         const stored = appStorage.getItem(storageKeys.PAYMENTS);
         const payments = stored ? JSON.parse(stored) : [];
         const currentViewDate = getCurrentViewDate();
-        const today = normalizeDate(new Date());
         const viewMonth = normalizeDate(new Date(currentViewDate.getFullYear(), currentViewDate.getMonth(), 1));
         const visiblePayments = [];
 
@@ -279,17 +284,23 @@ export function createRenderController({
             amount.textContent = formatExpenseAmountPLN(payment.amount || 0);
             row.appendChild(amount);
 
-            if (parseDateString(payment.date) <= today) {
-                const paidBtn = document.createElement('button');
-                paidBtn.className = 'paid-btn';
-                paidBtn.type = 'button';
-                paidBtn.textContent = 'Opłacone';
-                paidBtn.addEventListener('click', event => {
-                    event.stopPropagation();
-                    markPaymentAsPaid(payment.id, payment.date);
-                });
-                row.appendChild(paidBtn);
-            }
+            const paidBtn = document.createElement('button');
+            paidBtn.className = 'paid-btn';
+            paidBtn.type = 'button';
+            paidBtn.textContent = 'Opłacone';
+            paidBtn.addEventListener('click', event => {
+                event.stopPropagation();
+                const shouldSettle = confirm(
+                    `Oznaczyć płatność "${normalizeUserText(payment.name)}" jako opłaconą na dziś?\n`
+                    + `Kwota: ${formatExpenseAmountPLN(payment.amount || 0)}\n`
+                    + `Planowana data: ${formatDateToPolish(payment.date)}`
+                );
+                if (!shouldSettle) {
+                    return;
+                }
+                markPaymentAsPaid(payment.id, payment.date);
+            });
+            row.appendChild(paidBtn);
 
             listElement.appendChild(row);
         });

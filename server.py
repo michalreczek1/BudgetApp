@@ -1235,6 +1235,7 @@ def apply_server_settlement(state, run_reason):
             if occurrence in paid_dates:
                 continue
 
+            booked_date = today_iso if manual_target and manual_target["type"] == "payment" else occurrence
             settled_payments += 1
             balance_delta = round_currency(balance_delta - amount_value)
             expenses.append(
@@ -1242,7 +1243,7 @@ def apply_server_settlement(state, run_reason):
                     "id": next_id,
                     "amount": amount_value,
                     "category": "zaplanowane płatności",
-                    "date": occurrence,
+                    "date": booked_date,
                     "source": "planned-payment",
                     "name": sanitize_text(payment_item.get("name", ""), default=""),
                     "icon": "📅",
@@ -1261,6 +1262,8 @@ def apply_server_settlement(state, run_reason):
                         "paymentName": payment_item.get("name", ""),
                         "frequency": payment_item.get("frequency", "once"),
                         "source": "planned-payment",
+                        "scheduledOccurrence": occurrence,
+                        "bookedDate": booked_date,
                         "runReason": run_reason,
                     },
                 }
@@ -1300,6 +1303,7 @@ def apply_server_settlement(state, run_reason):
             if occurrence in received_dates:
                 continue
 
+            booked_date = today_iso if manual_target and manual_target["type"] == "income" else occurrence
             settled_incomes += 1
             balance_delta = round_currency(balance_delta + amount_value)
             incomes.append(
@@ -1307,7 +1311,7 @@ def apply_server_settlement(state, run_reason):
                     "id": next_id,
                     "amount": amount_value,
                     "category": "zaplanowane wpływy",
-                    "date": occurrence,
+                    "date": booked_date,
                     "source": "planned-income",
                     "name": sanitize_text(income_item.get("name", ""), default=""),
                     "icon": "📅",
@@ -1326,6 +1330,8 @@ def apply_server_settlement(state, run_reason):
                         "incomeName": income_item.get("name", ""),
                         "frequency": income_item.get("frequency", "once"),
                         "source": "planned-income",
+                        "scheduledOccurrence": occurrence,
+                        "bookedDate": booked_date,
                         "runReason": run_reason,
                     },
                 }
