@@ -896,10 +896,12 @@ const parseUserDateToISO = importedParseUserDateToISO;
         const {
             openIncomeModal,
             closeIncomeModal,
+            handleIncomeCategoryChange,
             setIncomeModalMode,
             resetIncomeForm,
             openPaymentModal,
             closePaymentModal,
+            handlePaymentCategoryChange,
             setPaymentModalMode,
             resetPaymentForm,
             selectPaymentFrequency,
@@ -1073,6 +1075,50 @@ const parseUserDateToISO = importedParseUserDateToISO;
             return String(value || '').trim().slice(0, maxLength);
         }
 
+        function getPlannedEntryCategoryOptions(type) {
+            return type === 'income' ? INCOME_CATEGORY_OPTIONS : EXPENSE_CATEGORY_OPTIONS;
+        }
+
+        function applyPlannedEntryCategoryToForm({ type, selectId, otherInputId, category }) {
+            const select = document.getElementById(selectId);
+            const otherInput = document.getElementById(otherInputId);
+            if (!select) {
+                return;
+            }
+
+            const rawCategory = normalizeUserText(category);
+            const normalizedCategory = rawCategory.toLowerCase();
+            const allowedValues = new Set(getPlannedEntryCategoryOptions(type).map(option => option.value));
+            const isPresetCategory = allowedValues.has(normalizedCategory);
+
+            select.value = isPresetCategory ? normalizedCategory : 'inne';
+            if (otherInput) {
+                otherInput.value = isPresetCategory ? '' : rawCategory;
+            }
+        }
+
+        function resolvePlannedEntryCategory({ selectId, otherInputId, label }) {
+            const select = document.getElementById(selectId);
+            if (!select) {
+                return 'inne';
+            }
+
+            const selectedCategory = normalizeUserText(select.value).toLowerCase() || 'inne';
+            if (selectedCategory !== 'inne') {
+                return selectedCategory;
+            }
+
+            const otherInput = document.getElementById(otherInputId);
+            const customCategory = normalizeUserText(otherInput?.value);
+            if (!customCategory) {
+                showToast(`Wpisz nazwę kategorii dla ${label}`, 'warning');
+                otherInput?.focus();
+                return null;
+            }
+
+            return customCategory;
+        }
+
         function formatDateInput(input) {
             const digits = input.value.replace(/\D/g, '').slice(0, 8);
             const parts = [];
@@ -1237,12 +1283,13 @@ const parseUserDateToISO = importedParseUserDateToISO;
             document.getElementById('incomeName').value = income.name;
             document.getElementById('incomeAmount').value = income.amount;
             document.getElementById('incomeDate').value = formatDateToPolish(income.date);
-            const incomeCategorySelect = document.getElementById('incomeCategory');
-            if (incomeCategorySelect) {
-                const normalizedCategory = String(income.category || 'inne').toLowerCase();
-                const allowedCategories = ['premia', 'rodzice', 'inne'];
-                incomeCategorySelect.value = allowedCategories.includes(normalizedCategory) ? normalizedCategory : 'inne';
-            }
+            applyPlannedEntryCategoryToForm({
+                type: 'income',
+                selectId: 'incomeCategory',
+                otherInputId: 'incomeCategoryOther',
+                category: income.category || 'inne'
+            });
+            handleIncomeCategoryChange();
             selectIncomeFrequency(income.frequency || 'once');
             document.getElementById('incomeModal').classList.add('active');
         }
@@ -1259,6 +1306,13 @@ const parseUserDateToISO = importedParseUserDateToISO;
             setPaymentModalMode(true);
             document.getElementById('paymentName').value = payment.name;
             document.getElementById('paymentAmount').value = payment.amount;
+            applyPlannedEntryCategoryToForm({
+                type: 'expense',
+                selectId: 'paymentCategory',
+                otherInputId: 'paymentCategoryOther',
+                category: payment.category || 'inne'
+            });
+            handlePaymentCategoryChange();
             document.getElementById('paymentDate').value = formatDateToPolish(payment.date);
             selectPaymentFrequency(payment.frequency || 'once');
             selectedMonths = payment.frequency === 'selected' && Array.isArray(payment.months) ? [...payment.months] : [];
@@ -1322,7 +1376,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
             dateInputId,
             frequency,
             selectedMonthsForPayments,
-            incomeCategory
+            category
         }) {
             const name = normalizeUserText(document.getElementById(nameInputId).value);
             const amount = parseFloat(document.getElementById(amountInputId).value);
@@ -1359,12 +1413,9 @@ const parseUserDateToISO = importedParseUserDateToISO;
                         date,
                         frequency,
                         ...(type === 'expense' ? { months } : {}),
+                        category: category || 'inne',
                         type
                     };
-
-                    if (type === 'income') {
-                        nextEntry.category = incomeCategory || 'inne';
-                    }
 
                     return nextEntry;
                 })
@@ -1378,12 +1429,9 @@ const parseUserDateToISO = importedParseUserDateToISO;
                             date,
                             frequency,
                             ...(type === 'expense' ? { months } : {}),
+                            category: category || 'inne',
                             type
                         };
-
-                        if (type === 'income') {
-                            baseEntry.category = incomeCategory || 'inne';
-                        }
 
                         return baseEntry;
                     })()
@@ -1395,12 +1443,18 @@ const parseUserDateToISO = importedParseUserDateToISO;
 
         function saveIncome() {
             const incomeCategorySelect = document.getElementById('incomeCategory');
-            const incomeCategoryValue = incomeCategorySelect
-                ? normalizeUserText(incomeCategorySelect.value).toLowerCase() || 'inne'
-                : 'inne';
+            const incomeCategoryValue = resolvePlannedEntryCategory({
+                selectId: 'incomeCategory',
+                otherInputId: 'incomeCategoryOther',
+                label: 'wpływu'
+            });
+            if (!incomeCategoryValue) {
+                return;
+            }
             const incomeNameInput = document.getElementById('incomeName');
             if (incomeNameInput) {
                 const categoryLabel = incomeCategorySelect
+                    && String(incomeCategorySelect.value || '').toLowerCase() !== 'inne'
                     ? normalizeUserText(
                         incomeCategorySelect.options[incomeCategorySelect.selectedIndex]?.textContent ||
                         incomeCategoryValue
@@ -1417,7 +1471,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
                 dateInputId: 'incomeDate',
                 frequency: selectedIncomeFrequency,
                 selectedMonthsForPayments: [],
-                incomeCategory: incomeCategoryValue
+                category: incomeCategoryValue
             });
 
             if (!success) {
@@ -1430,6 +1484,15 @@ const parseUserDateToISO = importedParseUserDateToISO;
         }
 
         function savePayment() {
+            const paymentCategoryValue = resolvePlannedEntryCategory({
+                selectId: 'paymentCategory',
+                otherInputId: 'paymentCategoryOther',
+                label: 'wydatku'
+            });
+            if (!paymentCategoryValue) {
+                return;
+            }
+
             const success = saveEntry({
                 type: 'expense',
                 editingId: editingPaymentId,
@@ -1437,7 +1500,8 @@ const parseUserDateToISO = importedParseUserDateToISO;
                 amountInputId: 'paymentAmount',
                 dateInputId: 'paymentDate',
                 frequency: selectedPaymentFrequency,
-                selectedMonthsForPayments: selectedMonths
+                selectedMonthsForPayments: selectedMonths,
+                category: paymentCategoryValue
             });
 
             if (!success) {
@@ -1561,6 +1625,10 @@ const parseUserDateToISO = importedParseUserDateToISO;
         });
 
         setupDatePickerControls();
+        document.getElementById('incomeCategory')?.addEventListener('change', handleIncomeCategoryChange);
+        document.getElementById('paymentCategory')?.addEventListener('change', handlePaymentCategoryChange);
+        handleIncomeCategoryChange();
+        handlePaymentCategoryChange();
         setupPwaInstallPrompt();
         registerServiceWorker();
         initializeStorage();

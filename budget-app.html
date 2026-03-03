@@ -271,6 +271,11 @@
                 </select>
             </div>
 
+            <div class="input-group hidden" id="incomeCategoryOtherGroup">
+                <label>Nazwa kategorii</label>
+                <input type="text" id="incomeCategoryOther" placeholder="np. Zwrot, Prezent, Sprzedaż" maxlength="120">
+            </div>
+
             <div class="input-group">
                 <label>Data wpływu</label>
                 <div class="date-input-wrapper">
@@ -316,6 +321,23 @@
             <div class="input-group">
                 <label>Kwota (zł)</label>
                 <input type="number" id="paymentAmount" placeholder="0.00" step="0.01">
+            </div>
+
+            <div class="input-group">
+                <label>Kategoria wydatku</label>
+                <select id="paymentCategory">
+                    <option value="jedzenie">🍽️ Jedzenie</option>
+                    <option value="paliwo">⛽ Paliwo</option>
+                    <option value="lekarstwa">💊 Lekarstwa</option>
+                    <option value="suplementy">💪 Suplementy</option>
+                    <option value="ubrania">👕 Ubrania</option>
+                    <option value="inne">✨ Inne</option>
+                </select>
+            </div>
+
+            <div class="input-group hidden" id="paymentCategoryOtherGroup">
+                <label>Nazwa kategorii</label>
+                <input type="text" id="paymentCategoryOther" placeholder="np. Czynsz, Rachunki, Serwis auta" maxlength="120">
             </div>
 
             <div class="input-group">

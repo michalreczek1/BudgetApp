@@ -10,6 +10,32 @@ export function createUiModalsController({
     getSelectedMonths,
     setSelectedMonths
 }) {
+    function syncOtherCategoryField(selectId, groupId, inputId) {
+        const select = document.getElementById(selectId);
+        const group = document.getElementById(groupId);
+        const input = document.getElementById(inputId);
+        if (!select || !group || !input) {
+            return;
+        }
+
+        const isOther = String(select.value || '').trim().toLowerCase() === 'inne';
+        group.classList.toggle('hidden', !isOther);
+        input.disabled = !isOther;
+        if (!isOther) {
+            input.value = '';
+            return;
+        }
+        input.focus();
+    }
+
+    function handleIncomeCategoryChange() {
+        syncOtherCategoryField('incomeCategory', 'incomeCategoryOtherGroup', 'incomeCategoryOther');
+    }
+
+    function handlePaymentCategoryChange() {
+        syncOtherCategoryField('paymentCategory', 'paymentCategoryOtherGroup', 'paymentCategoryOther');
+    }
+
     function openIncomeModal() {
         setEditingIncomeId(null);
         setIncomeModalMode(false);
@@ -39,6 +65,11 @@ export function createUiModalsController({
         if (incomeCategorySelect) {
             incomeCategorySelect.value = 'inne';
         }
+        const incomeCategoryOtherInput = document.getElementById('incomeCategoryOther');
+        if (incomeCategoryOtherInput) {
+            incomeCategoryOtherInput.value = '';
+        }
+        handleIncomeCategoryChange();
         document.getElementById('incomeDate').value = '';
         selectIncomeFrequency('once');
     }
@@ -68,6 +99,15 @@ export function createUiModalsController({
     function resetPaymentForm() {
         document.getElementById('paymentName').value = '';
         document.getElementById('paymentAmount').value = '';
+        const paymentCategorySelect = document.getElementById('paymentCategory');
+        if (paymentCategorySelect) {
+            paymentCategorySelect.value = 'inne';
+        }
+        const paymentCategoryOtherInput = document.getElementById('paymentCategoryOther');
+        if (paymentCategoryOtherInput) {
+            paymentCategoryOtherInput.value = '';
+        }
+        handlePaymentCategoryChange();
         document.getElementById('paymentDate').value = '';
         setSelectedMonths([]);
         syncMonthButtons();
@@ -129,6 +169,8 @@ export function createUiModalsController({
         resetIncomeForm,
         openPaymentModal,
         closePaymentModal,
+        handleIncomeCategoryChange,
+        handlePaymentCategoryChange,
         setPaymentModalMode,
         resetPaymentForm,
         selectPaymentFrequency,

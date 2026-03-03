@@ -206,6 +206,12 @@ def sanitize_payment(payment):
         base_date = date.today().isoformat()
 
     months = normalize_months(payment.get("months", [])) if frequency == "selected" else []
+    category = sanitize_text(
+        payment.get("category", ""),
+        max_length=MAX_TEXT_LENGTH,
+        allow_empty=False,
+        default="inne",
+    )
 
     return {
         "id": payment_id,
@@ -216,6 +222,7 @@ def sanitize_payment(payment):
         "months": months,
         "paidDates": normalize_date_list(payment.get("paidDates", [])),
         "type": "expense",
+        "category": category,
     }
 
 
@@ -381,6 +388,27 @@ def build_category_totals(entries):
     return totals
 
 
+def get_category_icon(entry_type, category):
+    normalized = sanitize_text(category, allow_empty=False, default="inne").lower()
+    expense_icons = {
+        "jedzenie": "🍽️",
+        "paliwo": "⛽",
+        "lekarstwa": "💊",
+        "suplementy": "💪",
+        "ubrania": "👕",
+        "inne": "✨",
+    }
+    income_icons = {
+        "premia": "🎁",
+        "rodzice": "👨‍👩‍👧",
+        "inne": "✨",
+    }
+
+    if entry_type == "income":
+        return income_icons.get(normalized, "💵")
+    return expense_icons.get(normalized, "🧾")
+
+
 def add_validation_error(errors, field, message):
     errors.append({"field": field, "message": message})
 
@@ -419,11 +447,11 @@ def validate_state_payload(payload):
                 add_validation_error(errors, prefix, "Item must be an object")
                 continue
 
-            allowed_keys = {"id", "name", "amount", "date", "frequency", "type"}
+            allowed_keys = {"id", "name", "amount", "date", "frequency", "type", "category"}
             if entry_kind == "payment":
                 allowed_keys.update({"months", "paidDates"})
             else:
-                allowed_keys.update({"receivedDates", "category"})
+                allowed_keys.update({"receivedDates"})
             unknown = sorted(set(item.keys()) - allowed_keys)
             for key in unknown:
                 add_validation_error(errors, f"{prefix}.{key}", "Unknown field")
@@ -475,6 +503,10 @@ def validate_state_payload(payload):
                         add_validation_error(errors, f"{prefix}.paidDates", "paidDates must contain valid YYYY-MM-DD dates")
                     if len(normalized_paid) != len(paid_dates):
                         add_validation_error(errors, f"{prefix}.paidDates", "paidDates must contain unique dates")
+
+                category_text = str(item.get("category", "")).strip()
+                if category_text and len(category_text) > MAX_TEXT_LENGTH:
+                    add_validation_error(errors, f"{prefix}.category", f"Category max length is {MAX_TEXT_LENGTH}")
             else:
                 received_dates = item.get("receivedDates", [])
                 if received_dates not in (None, []) and not isinstance(received_dates, list):
@@ -1228,6 +1260,12 @@ def apply_server_settlement(state, run_reason):
         amount_value = abs(round_currency(payment_item.get("amount", 0)))
         paid_dates = set(normalize_date_list(payment_item.get("paidDates", [])))
         keep_item = payment_item.get("frequency") != "once"
+        payment_category = sanitize_text(
+            payment_item.get("category", ""),
+            max_length=MAX_TEXT_LENGTH,
+            allow_empty=False,
+            default="inne",
+        )
 
         for occurrence in due_occurrences:
             if amount_value <= 0:
@@ -1242,11 +1280,11 @@ def apply_server_settlement(state, run_reason):
                 {
                     "id": next_id,
                     "amount": amount_value,
-                    "category": "zaplanowane płatności",
+                    "category": payment_category,
                     "date": booked_date,
                     "source": "planned-payment",
                     "name": sanitize_text(payment_item.get("name", ""), default=""),
-                    "icon": "📅",
+                    "icon": get_category_icon("expense", payment_category),
                 }
             )
             next_id += 1
@@ -1260,6 +1298,7 @@ def apply_server_settlement(state, run_reason):
                     "details": {
                         "paymentId": int(payment_item.get("id", 0)),
                         "paymentName": payment_item.get("name", ""),
+                        "category": payment_category,
                         "frequency": payment_item.get("frequency", "once"),
                         "source": "planned-payment",
                         "scheduledOccurrence": occurrence,
@@ -1296,6 +1335,12 @@ def apply_server_settlement(state, run_reason):
         amount_value = abs(round_currency(income_item.get("amount", 0)))
         received_dates = set(normalize_date_list(income_item.get("receivedDates", [])))
         keep_item = income_item.get("frequency") != "once"
+        income_category = sanitize_text(
+            income_item.get("category", ""),
+            max_length=MAX_TEXT_LENGTH,
+            allow_empty=False,
+            default="inne",
+        )
 
         for occurrence in due_occurrences:
             if amount_value <= 0:
@@ -1310,11 +1355,11 @@ def apply_server_settlement(state, run_reason):
                 {
                     "id": next_id,
                     "amount": amount_value,
-                    "category": "zaplanowane wpływy",
+                    "category": income_category,
                     "date": booked_date,
                     "source": "planned-income",
                     "name": sanitize_text(income_item.get("name", ""), default=""),
-                    "icon": "📅",
+                    "icon": get_category_icon("income", income_category),
                 }
             )
             next_id += 1
@@ -1328,6 +1373,7 @@ def apply_server_settlement(state, run_reason):
                     "details": {
                         "incomeId": int(income_item.get("id", 0)),
                         "incomeName": income_item.get("name", ""),
+                        "category": income_category,
                         "frequency": income_item.get("frequency", "once"),
                         "source": "planned-income",
                         "scheduledOccurrence": occurrence,
