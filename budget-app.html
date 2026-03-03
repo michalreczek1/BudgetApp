@@ -55,6 +55,7 @@
                 <button class="icon-btn" onclick="openAdminPanel()" title="Ustawienia">⚙️</button>
                 <button class="icon-btn" onclick="openExpenseAnalysisModal()" title="Analiza wydatków">📊</button>
                 <button class="icon-btn" onclick="openIncomeAnalysisModal()" title="Analiza wpływów">📈</button>
+                <button class="icon-btn" onclick="openTenantPaymentsModal()" title="Wpłaty najemców">🏠</button>
                 <button class="icon-btn" onclick="logout()" title="Wyloguj">🚪</button>
             </div>
         </div>
@@ -77,6 +78,20 @@
                 <div class="stat-label">Dostępna gotówka</div>
                 <div class="stat-value" id="afterPayments">0.00 zł</div>
                 <div class="stat-subtext" id="afterPaymentsSubtext">Po uwzględnieniu zobowiązań</div>
+            </div>
+        </div>
+
+        <div class="payments-section tenant-report-section clickable" onclick="openTenantPaymentsModal()" role="button" tabindex="0" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openTenantPaymentsModal(); }" title="Kliknij, aby otworzyć moduł najemców">
+            <div class="section-header">
+                <h2>🏠 Raport najemców</h2>
+                <span class="tenant-report-month" id="tenantDashboardMonth">-</span>
+            </div>
+            <div class="tenant-report-summary" id="tenantDashboardSummary">Brak aktywnych najemców. Otwórz moduł i uzupełnij dane lokatorów.</div>
+            <div class="tenant-report-list" id="tenantDashboardList">
+                <div class="empty-state tenant-report-empty">
+                    <div class="icon">🏠</div>
+                    <p>Raport pojawi się po zapisaniu aktywnych najemców.</p>
+                </div>
             </div>
         </div>
 
@@ -247,6 +262,28 @@
         </div>
     </div>
 
+    <div class="modal" id="tenantPaymentsModal">
+        <div class="modal-content tenant-modal-content">
+            <div class="modal-header">
+                <h2>🏠 Wpłaty najemców</h2>
+                <button class="close-btn" onclick="closeTenantPaymentsModal()">✕</button>
+            </div>
+
+            <div class="input-group">
+                <label>Wybierz miesiąc</label>
+                <input type="month" id="tenantPaymentsMonth" onchange="changeTenantPaymentsMonth()">
+            </div>
+
+            <div class="tenant-summary" id="tenantPaymentsSummary">Zapłacono: 0 • Oczekuje: 0 • Po terminie: 0 • Ukryte: 7</div>
+            <div class="tenant-payments-list" id="tenantPaymentsList"></div>
+
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeTenantPaymentsModal()">Zamknij</button>
+                <button class="btn btn-primary" onclick="saveTenantProfiles()">Zapisz dane najemców</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Add Income Modal -->
     <div class="modal" id="incomeModal">
         <div class="modal-content">
@@ -267,6 +304,7 @@
                 <select id="incomeCategory" onchange="handleIncomeCategoryChange()" oninput="handleIncomeCategoryChange()">
                     <option value="premia">🎁 Premia</option>
                     <option value="rodzice">👨‍👩‍👧 Rodzice</option>
+                    <option value="najem">🏠 Najem</option>
                     <option value="inne">✨ Inne</option>
                 </select>
             </div>

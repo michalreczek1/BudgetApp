@@ -1,5 +1,10 @@
 import { formatDateString } from '../date-utils.js';
 import { roundCurrency } from './formatters.js';
+import {
+    sanitizeTenantProfiles,
+    sanitizeTenantPaymentHistory,
+    isTenantProfilesEffectivelyEmpty
+} from './tenants.js';
 
 export const CLIENT_DEPRECATED_PIN_VALUE = '__deprecated__';
 
@@ -53,7 +58,9 @@ export function sanitizeState(rawState) {
         expenseEntries: sanitizeEntries(rawState?.expenseEntries),
         incomeEntries: sanitizeEntries(rawState?.incomeEntries),
         expenseCategoryTotals: sanitizeTotals(rawState?.expenseCategoryTotals),
-        incomeCategoryTotals: sanitizeTotals(rawState?.incomeCategoryTotals)
+        incomeCategoryTotals: sanitizeTotals(rawState?.incomeCategoryTotals),
+        tenantProfiles: sanitizeTenantProfiles(rawState?.tenantProfiles),
+        tenantPaymentHistory: sanitizeTenantPaymentHistory(rawState?.tenantPaymentHistory)
     };
 }
 
@@ -70,7 +77,10 @@ export function isStateEffectivelyEmpty(state) {
         Array.isArray(state.incomeEntries) &&
         state.incomeEntries.length === 0 &&
         Object.keys(state.expenseCategoryTotals || {}).length === 0 &&
-        Object.keys(state.incomeCategoryTotals || {}).length === 0
+        Object.keys(state.incomeCategoryTotals || {}).length === 0 &&
+        isTenantProfilesEffectivelyEmpty(state.tenantProfiles) &&
+        Array.isArray(state.tenantPaymentHistory) &&
+        state.tenantPaymentHistory.length === 0
     );
 }
 

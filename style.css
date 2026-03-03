@@ -732,6 +732,203 @@
             flex: 1;
         }
 
+        .tenant-modal-content {
+            max-width: 860px;
+        }
+
+        .tenant-summary {
+            margin-bottom: 20px;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(79, 133, 255, 0.25);
+            background: rgba(79, 133, 255, 0.08);
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            font-weight: 600;
+        }
+
+        .tenant-report-section {
+            cursor: pointer;
+            transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .tenant-report-section:hover {
+            border-color: rgba(79, 133, 255, 0.28);
+            transform: translateY(-1px);
+            box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+        }
+
+        .tenant-report-month {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(79, 133, 255, 0.1);
+            color: #9ab9ff;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+
+        .tenant-report-summary {
+            margin-bottom: 16px;
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-weight: 600;
+            line-height: 1.45;
+        }
+
+        .tenant-report-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .tenant-report-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 14px 16px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .tenant-report-name-wrap {
+            min-width: 0;
+        }
+
+        .tenant-report-name {
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .tenant-report-meta {
+            color: var(--text-secondary);
+            font-size: 0.86rem;
+        }
+
+        .tenant-report-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .tenant-report-amount {
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .tenant-report-empty {
+            margin: 0;
+        }
+
+        .tenant-payments-list {
+            display: grid;
+            gap: 16px;
+        }
+
+        .tenant-card {
+            border: 1px solid var(--border-color);
+            border-radius: 18px;
+            background: rgba(18, 24, 34, 0.92);
+            padding: 18px;
+        }
+
+        .tenant-card-inactive {
+            opacity: 0.72;
+            background: rgba(18, 24, 34, 0.55);
+        }
+
+        .tenant-card-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .tenant-active-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .tenant-active-toggle input {
+            width: 18px;
+            height: 18px;
+        }
+
+        .tenant-card-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.6fr) repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .tenant-card-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 16px;
+            margin-top: 6px;
+            color: var(--text-secondary);
+            font-size: 0.88rem;
+        }
+
+        .tenant-card-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 16px;
+        }
+
+        .tenant-card-muted {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .tenant-status-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 112px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            font-size: 0.82rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+
+        .tenant-status-paid {
+            background: rgba(0, 212, 170, 0.14);
+            color: #5ef2c7;
+            border: 1px solid rgba(0, 212, 170, 0.28);
+        }
+
+        .tenant-status-awaiting {
+            background: rgba(79, 133, 255, 0.12);
+            color: #8db5ff;
+            border: 1px solid rgba(79, 133, 255, 0.26);
+        }
+
+        .tenant-status-overdue {
+            background: rgba(255, 107, 107, 0.14);
+            color: #ff8f8f;
+            border: 1px solid rgba(255, 107, 107, 0.28);
+        }
+
+        .tenant-status-missing,
+        .tenant-status-inactive {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-secondary);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
         .btn-secondary {
             background: var(--bg-secondary);
             color: var(--text-primary);
@@ -1154,6 +1351,22 @@
 
             .modal-content {
                 padding: 24px;
+            }
+
+            .tenant-card-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .tenant-report-row,
+            .tenant-report-right {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .tenant-card-head,
+            .tenant-card-actions {
+                flex-direction: column;
+                align-items: stretch;
             }
 
             .month-selector {

@@ -19,6 +19,7 @@ import { createAnalysisController } from './js/analysis.js';
 import { createUiModalsController } from './js/ui-modals.js';
 import { createActionsController } from './js/actions.js';
 import { calculateAvailableCashForecast } from './js/cash-forecast.js';
+import { createTenantPaymentsController } from './js/tenant-payments.js';
 import {
     normalizeDate,
     isOccurrencePaid,
@@ -65,7 +66,9 @@ const parseUserDateToISO = importedParseUserDateToISO;
             EXPENSE_ENTRIES: 'budget_expense_entries',
             INCOME_ENTRIES: 'budget_income_entries',
             EXPENSE_TOTALS: 'budget_expense_totals',
-            INCOME_TOTALS: 'budget_income_totals'
+            INCOME_TOTALS: 'budget_income_totals',
+            TENANT_PROFILES: 'budget_tenant_profiles',
+            TENANT_PAYMENT_HISTORY: 'budget_tenant_payment_history'
         };
         const ADMIN_SUCCESS_DEFAULT_MESSAGE = 'PIN został pomyślnie zmieniony!';
         const MAX_TEXT_LENGTH = 120;
@@ -81,6 +84,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
         const INCOME_CATEGORY_OPTIONS = [
             { value: 'premia', label: '🎁 Premia', icon: '🎁' },
             { value: 'rodzice', label: '👨‍👩‍👧 Rodzice', icon: '👨‍👩‍👧' },
+            { value: 'najem', label: '🏠 Najem', icon: '🏠' },
             { value: 'inne', label: '✨ Inne', icon: '✨' }
         ];
 
@@ -107,7 +111,9 @@ const parseUserDateToISO = importedParseUserDateToISO;
             expenseEntries: [],
             incomeEntries: [],
             expenseCategoryTotals: {},
-            incomeCategoryTotals: {}
+            incomeCategoryTotals: {},
+            tenantProfiles: [],
+            tenantPaymentHistory: []
         };
 
         function migrateLegacyLocalStorageIfNeeded() {
@@ -327,6 +333,12 @@ const parseUserDateToISO = importedParseUserDateToISO;
                 if (key === STORAGE_KEYS.INCOME_TOTALS) {
                     return JSON.stringify(appState.incomeCategoryTotals);
                 }
+                if (key === STORAGE_KEYS.TENANT_PROFILES) {
+                    return JSON.stringify(appState.tenantProfiles);
+                }
+                if (key === STORAGE_KEYS.TENANT_PAYMENT_HISTORY) {
+                    return JSON.stringify(appState.tenantPaymentHistory);
+                }
                 return null;
             },
             setItem(key, value) {
@@ -376,6 +388,20 @@ const parseUserDateToISO = importedParseUserDateToISO;
                         appState.incomeCategoryTotals = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
                     } catch {
                         appState.incomeCategoryTotals = {};
+                    }
+                } else if (key === STORAGE_KEYS.TENANT_PROFILES) {
+                    try {
+                        const parsed = JSON.parse(value);
+                        appState.tenantProfiles = Array.isArray(parsed) ? parsed : [];
+                    } catch {
+                        appState.tenantProfiles = [];
+                    }
+                } else if (key === STORAGE_KEYS.TENANT_PAYMENT_HISTORY) {
+                    try {
+                        const parsed = JSON.parse(value);
+                        appState.tenantPaymentHistory = Array.isArray(parsed) ? parsed : [];
+                    } catch {
+                        appState.tenantPaymentHistory = [];
                     }
                 }
 
@@ -449,6 +475,34 @@ const parseUserDateToISO = importedParseUserDateToISO;
             formatEntryDate,
             formatExpenseAmountPLN,
             formatIncomeAmountPLN
+        });
+
+        const {
+            openTenantPaymentsModal,
+            closeTenantPaymentsModal,
+            changeTenantPaymentsMonth,
+            renderTenantPayments,
+            renderTenantDashboardReport,
+            saveTenantProfiles,
+            markTenantAsPaid,
+            undoTenantPayment
+        } = createTenantPaymentsController({
+            appStorage,
+            storageKeys: STORAGE_KEYS,
+            parseStoredJSON,
+            roundCurrency,
+            buildCategoryTotals,
+            showToast,
+            normalizeUserText,
+            formatDateToPolish,
+            formatCurrencyPLN,
+            getMonthInputValue,
+            getCategoryIcon,
+            loadBalance,
+            loadIncomes,
+            updateCalculations,
+            flushStateSave,
+            renderIncomeAnalysis
         });
 
         // App initialization and login/logout
@@ -582,6 +636,10 @@ const parseUserDateToISO = importedParseUserDateToISO;
             loadPayments();
             loadIncomes();
             updateCalculations();
+            renderTenantDashboardReport();
+            if (document.getElementById('tenantPaymentsModal')?.classList.contains('active')) {
+                renderTenantPayments();
+            }
         }
 
         // Modal Functions
@@ -948,6 +1006,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
             const incomeIcons = {
                 'premia': '🎁',
                 'rodzice': '👨‍👩‍👧',
+                'najem': '🏠',
                 'zaplanowane wpływy': '📅',
                 'inne': '✨'
             };
@@ -1564,6 +1623,10 @@ const parseUserDateToISO = importedParseUserDateToISO;
             openIncomeAnalysisModal,
             closeIncomeAnalysisModal,
             openIncomeAnalysisFromExpense,
+            openTenantPaymentsModal,
+            closeTenantPaymentsModal,
+            changeTenantPaymentsMonth,
+            renderTenantPayments,
             renderExpenseAnalysis,
             renderIncomeAnalysis,
             toggleExpenseDetails,
@@ -1590,6 +1653,9 @@ const parseUserDateToISO = importedParseUserDateToISO;
             selectIncomeFrequency,
             selectPaymentFrequency,
             toggleMonth,
+            saveTenantProfiles,
+            markTenantAsPaid,
+            undoTenantPayment,
             getEditingIncomeId: () => editingIncomeId,
             getEditingPaymentId: () => editingPaymentId,
             appStorage,
@@ -1627,6 +1693,9 @@ const parseUserDateToISO = importedParseUserDateToISO;
                 }
                 if (document.getElementById('incomeAnalysisModal')?.classList.contains('active')) {
                     closeIncomeAnalysisModal();
+                }
+                if (document.getElementById('tenantPaymentsModal')?.classList.contains('active')) {
+                    closeTenantPaymentsModal();
                 }
             }
 

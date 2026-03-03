@@ -46,6 +46,8 @@ DEPRECATED_PIN_VALUE = "__deprecated__"
 APP_TIMEZONE_NAME = str(os.getenv("APP_TIMEZONE", "Europe/Warsaw")).strip() or "Europe/Warsaw"
 VALID_PAYMENT_FREQUENCIES = {"once", "monthly", "selected"}
 VALID_INCOME_FREQUENCIES = {"once", "monthly"}
+TENANT_SLOT_COUNT = 7
+DEFAULT_TENANT_DUE_DAY = 10
 DEFAULT_STATE = {
     "pin": DEPRECATED_PIN_VALUE,
     "version": 1,
@@ -56,6 +58,8 @@ DEFAULT_STATE = {
     "incomeEntries": [],
     "expenseCategoryTotals": {},
     "incomeCategoryTotals": {},
+    "tenantProfiles": [],
+    "tenantPaymentHistory": [],
 }
 
 DB_LOCK = threading.Lock()
@@ -91,6 +95,8 @@ STATIC_FILE_WHITELIST = {
     "/js/scheduling.js": "js/scheduling.js",
     "/js/actions.js": "js/actions.js",
     "/js/cash-forecast.js": "js/cash-forecast.js",
+    "/js/tenants.js": "js/tenants.js",
+    "/js/tenant-payments.js": "js/tenant-payments.js",
     "/js/state.js": "js/state.js",
     "/service-worker.js": "service-worker.js",
     "/manifest.webmanifest": "manifest.webmanifest",
@@ -107,6 +113,8 @@ STATE_REQUIRED_KEYS = {
     "incomeEntries",
     "expenseCategoryTotals",
     "incomeCategoryTotals",
+    "tenantProfiles",
+    "tenantPaymentHistory",
 }
 SETTLEMENT_STATUS = {
     "lastRunAt": None,
@@ -263,6 +271,120 @@ def sanitize_income(income):
     }
 
 
+def sanitize_tenant_due_day(raw_value):
+    try:
+        due_day = int(raw_value)
+    except (TypeError, ValueError):
+        due_day = DEFAULT_TENANT_DUE_DAY
+
+    if due_day < 1 or due_day > 28:
+        return DEFAULT_TENANT_DUE_DAY
+    return due_day
+
+
+def build_default_tenant_profiles():
+    return [
+        {
+            "id": tenant_id,
+            "isActive": False,
+            "name": "",
+            "amount": 0.0,
+            "dueDay": DEFAULT_TENANT_DUE_DAY,
+        }
+        for tenant_id in range(1, TENANT_SLOT_COUNT + 1)
+    ]
+
+
+def sanitize_tenant_profiles(raw_profiles):
+    profiles = raw_profiles if isinstance(raw_profiles, list) else []
+    by_id = {}
+
+    for index, profile in enumerate(profiles):
+        if not isinstance(profile, dict):
+            continue
+
+        try:
+            tenant_id = int(profile.get("id", index + 1))
+        except (TypeError, ValueError):
+            tenant_id = index + 1
+
+        if tenant_id < 1 or tenant_id > TENANT_SLOT_COUNT:
+            continue
+
+        by_id[tenant_id] = {
+            "id": tenant_id,
+            "isActive": bool(profile.get("isActive")),
+            "name": sanitize_text(profile.get("name", ""), max_length=MAX_TEXT_LENGTH, default=""),
+            "amount": max(0.0, round_currency(profile.get("amount", 0))),
+            "dueDay": sanitize_tenant_due_day(profile.get("dueDay")),
+        }
+
+    defaults = build_default_tenant_profiles()
+    return [by_id.get(profile["id"], profile) for profile in defaults]
+
+
+def sanitize_tenant_payment_history(raw_history):
+    history = raw_history if isinstance(raw_history, list) else []
+    cleaned_history = []
+    seen_keys = set()
+
+    for index, record in enumerate(history):
+        if not isinstance(record, dict):
+            continue
+
+        try:
+            tenant_id = int(record.get("tenantId", 0))
+        except (TypeError, ValueError):
+            tenant_id = 0
+
+        month_value = str(record.get("month", "")).strip()
+        if tenant_id < 1 or tenant_id > TENANT_SLOT_COUNT or not re.fullmatch(r"\d{4}-\d{2}", month_value):
+            continue
+
+        logical_key = f"{tenant_id}:{month_value}"
+        if logical_key in seen_keys:
+            continue
+        seen_keys.add(logical_key)
+
+        due_day = sanitize_tenant_due_day(str(record.get("dueDate", "")).strip()[-2:])
+        default_due_date = f"{month_value}-{str(due_day).zfill(2)}"
+        due_date = str(record.get("dueDate", "")).strip()
+        if not is_iso_date(due_date):
+            due_date = default_due_date
+
+        paid_at = str(record.get("paidAt", "")).strip()
+        if paid_at and not is_iso_date(paid_at):
+            paid_at = ""
+
+        try:
+            record_id = int(record.get("id", 0))
+        except (TypeError, ValueError):
+            record_id = 0
+        if record_id <= 0:
+            record_id = int(time.time() * 1000) + index
+
+        try:
+            income_entry_id = int(record.get("incomeEntryId"))
+        except (TypeError, ValueError):
+            income_entry_id = 0
+
+        cleaned_history.append(
+            {
+                "id": record_id,
+                "tenantId": tenant_id,
+                "month": month_value,
+                "amount": max(0.0, round_currency(record.get("amount", 0))),
+                "dueDate": due_date,
+                "paid": bool(record.get("paid")),
+                "paidAt": paid_at,
+                "incomeEntryId": income_entry_id if income_entry_id > 0 else None,
+            }
+        )
+
+    cleaned_history.sort(key=lambda item: (item["month"], item["tenantId"]))
+    return cleaned_history
+
+
 def parse_json_column(value, fallback):
     try:
         parsed = json.loads(value)
@@ -402,6 +524,7 @@ def get_category_icon(entry_type, category):
     income_icons = {
         "premia": "🎁",
         "rodzice": "👨‍👩‍👧",
+        "najem": "🏠",
         "inne": "✨",
     }
 
@@ -584,12 +707,124 @@ def validate_state_payload(payload):
             if not is_finite_number(value) or float(value) < 0:
                 add_validation_error(errors, f"{field_name}.{category}", "Total must be a finite number >= 0")
 
+    def validate_tenant_profiles(field_name, profiles):
+        if not isinstance(profiles, list):
+            add_validation_error(errors, field_name, "Must be an array")
+            return
+
+        if len(profiles) > TENANT_SLOT_COUNT:
+            add_validation_error(errors, field_name, f"Maximum {TENANT_SLOT_COUNT} tenant profiles allowed")
+
+        seen_ids = set()
+        for idx, profile in enumerate(profiles):
+            prefix = f"{field_name}[{idx}]"
+            if not isinstance(profile, dict):
+                add_validation_error(errors, prefix, "Profile must be an object")
+                continue
+
+            allowed_keys = {"id", "isActive", "name", "amount", "dueDay"}
+            unknown = sorted(set(profile.keys()) - allowed_keys)
+            for key in unknown:
+                add_validation_error(errors, f"{prefix}.{key}", "Unknown field")
+
+            profile_id = profile.get("id")
+            if isinstance(profile_id, bool) or not isinstance(profile_id, int) or profile_id < 1 or profile_id > TENANT_SLOT_COUNT:
+                add_validation_error(errors, f"{prefix}.id", f"ID must be an integer from 1 to {TENANT_SLOT_COUNT}")
+            elif profile_id in seen_ids:
+                add_validation_error(errors, f"{prefix}.id", "Duplicate ID")
+            else:
+                seen_ids.add(profile_id)
+
+            if not isinstance(profile.get("isActive"), bool):
+                add_validation_error(errors, f"{prefix}.isActive", "isActive must be a boolean")
+
+            name_text = str(profile.get("name", "")).strip()
+            if len(name_text) > MAX_TEXT_LENGTH:
+                add_validation_error(errors, f"{prefix}.name", f"Name max length is {MAX_TEXT_LENGTH}")
+            if profile.get("isActive") is True and not name_text:
+                add_validation_error(errors, f"{prefix}.name", "Active tenant requires a name")
+
+            amount_value = profile.get("amount")
+            if not is_finite_number(amount_value) or float(amount_value) < 0:
+                add_validation_error(errors, f"{prefix}.amount", "Amount must be a finite number >= 0")
+            elif profile.get("isActive") is True and float(amount_value) <= 0:
+                add_validation_error(errors, f"{prefix}.amount", "Active tenant requires amount > 0")
+
+            due_day = profile.get("dueDay")
+            if isinstance(due_day, bool) or not isinstance(due_day, int) or due_day < 1 or due_day > 28:
+                add_validation_error(errors, f"{prefix}.dueDay", "dueDay must be an integer from 1 to 28")
+
+    def validate_tenant_payment_history(field_name, records):
+        if not isinstance(records, list):
+            add_validation_error(errors, field_name, "Must be an array")
+            return
+
+        seen_ids = set()
+        seen_logical_keys = set()
+        for idx, record in enumerate(records):
+            prefix = f"{field_name}[{idx}]"
+            if not isinstance(record, dict):
+                add_validation_error(errors, prefix, "Record must be an object")
+                continue
+
+            allowed_keys = {"id", "tenantId", "month", "amount", "dueDate", "paid", "paidAt", "incomeEntryId"}
+            unknown = sorted(set(record.keys()) - allowed_keys)
+            for key in unknown:
+                add_validation_error(errors, f"{prefix}.{key}", "Unknown field")
+
+            record_id = record.get("id")
+            if isinstance(record_id, bool) or not isinstance(record_id, int) or record_id <= 0:
+                add_validation_error(errors, f"{prefix}.id", "ID must be a positive integer")
+            elif record_id in seen_ids:
+                add_validation_error(errors, f"{prefix}.id", "Duplicate ID")
+            else:
+                seen_ids.add(record_id)
+
+            tenant_id = record.get("tenantId")
+            if isinstance(tenant_id, bool) or not isinstance(tenant_id, int) or tenant_id < 1 or tenant_id > TENANT_SLOT_COUNT:
+                add_validation_error(errors, f"{prefix}.tenantId", f"tenantId must be an integer from 1 to {TENANT_SLOT_COUNT}")
+
+            month_value = str(record.get("month", "")).strip()
+            if not re.fullmatch(r"\d{4}-\d{2}", month_value):
+                add_validation_error(errors, f"{prefix}.month", "month must be in YYYY-MM format")
+
+            if isinstance(tenant_id, int) and 1 <= tenant_id <= TENANT_SLOT_COUNT and re.fullmatch(r"\d{4}-\d{2}", month_value):
+                logical_key = f"{tenant_id}:{month_value}"
+                if logical_key in seen_logical_keys:
+                    add_validation_error(errors, f"{prefix}.month", "Duplicate tenant/month record")
+                else:
+                    seen_logical_keys.add(logical_key)
+
+            amount_value = record.get("amount")
+            if not is_finite_number(amount_value) or float(amount_value) < 0:
+                add_validation_error(errors, f"{prefix}.amount", "Amount must be a finite number >= 0")
+
+            if not is_iso_date(record.get("dueDate")):
+                add_validation_error(errors, f"{prefix}.dueDate", "dueDate must be in YYYY-MM-DD format")
+
+            if not isinstance(record.get("paid"), bool):
+                add_validation_error(errors, f"{prefix}.paid", "paid must be a boolean")
+
+            paid_at = record.get("paidAt", "")
+            if paid_at not in ("", None) and not is_iso_date(paid_at):
+                add_validation_error(errors, f"{prefix}.paidAt", "paidAt must be empty or YYYY-MM-DD")
+
+            income_entry_id = record.get("incomeEntryId")
+            if income_entry_id is not None and (
+                isinstance(income_entry_id, bool)
+                or not isinstance(income_entry_id, int)
+                or income_entry_id <= 0
+            ):
+                add_validation_error(errors, f"{prefix}.incomeEntryId", "incomeEntryId must be null or a positive integer")
+
     validate_schedule_items("payments", payload.get("payments"), "payment")
     validate_schedule_items("incomes", payload.get("incomes"), "income")
     validate_history_entries("expenseEntries", payload.get("expenseEntries"))
     validate_history_entries("incomeEntries", payload.get("incomeEntries"))
     validate_totals("expenseCategoryTotals", payload.get("expenseCategoryTotals"))
     validate_totals("incomeCategoryTotals", payload.get("incomeCategoryTotals"))
+    validate_tenant_profiles("tenantProfiles", payload.get("tenantProfiles"))
+    validate_tenant_payment_history("tenantPaymentHistory", payload.get("tenantPaymentHistory"))
     return errors
 
 
@@ -742,6 +977,8 @@ def sanitize_state(raw_state):
     income_entries = raw_state.get("incomeEntries", [])
     expense_totals = raw_state.get("expenseCategoryTotals", {})
     income_totals = raw_state.get("incomeCategoryTotals", {})
+    tenant_profiles = raw_state.get("tenantProfiles", [])
+    tenant_payment_history = raw_state.get("tenantPaymentHistory", [])
 
     if not isinstance(payments, list):
         payments = []
@@ -752,6 +989,8 @@ def sanitize_state(raw_state):
     cleaned_incomes = [sanitize_income(income) for income in incomes]
     cleaned_expense_entries = sanitize_entries(expense_entries, "inne")
     cleaned_income_entries = sanitize_entries(income_entries, "inne")
+    cleaned_tenant_profiles = sanitize_tenant_profiles(tenant_profiles)
+    cleaned_tenant_payment_history = sanitize_tenant_payment_history(tenant_payment_history)
 
     return {
         "pin": pin,
@@ -763,6 +1002,8 @@ def sanitize_state(raw_state):
         "incomeEntries": cleaned_income_entries,
         "expenseCategoryTotals": build_category_totals(cleaned_expense_entries),
         "incomeCategoryTotals": build_category_totals(cleaned_income_entries),
+        "tenantProfiles": cleaned_tenant_profiles,
+        "tenantPaymentHistory": cleaned_tenant_payment_history,
     }
 
 
@@ -1937,6 +2178,8 @@ def init_db():
                     income_entries TEXT NOT NULL DEFAULT '[]',
                     expense_totals TEXT NOT NULL DEFAULT '{}',
                     income_totals TEXT NOT NULL DEFAULT '{}',
+                    tenant_profiles TEXT NOT NULL DEFAULT '[]',
+                    tenant_payment_history TEXT NOT NULL DEFAULT '[]',
                     version INTEGER NOT NULL DEFAULT 1,
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
@@ -1963,6 +2206,14 @@ def init_db():
                 conn.execute(
                     "ALTER TABLE app_state ADD COLUMN income_totals TEXT NOT NULL DEFAULT '{}'"
                 )
+            if "tenant_profiles" not in existing_columns:
+                conn.execute(
+                    "ALTER TABLE app_state ADD COLUMN tenant_profiles TEXT NOT NULL DEFAULT '[]'"
+                )
+            if "tenant_payment_history" not in existing_columns:
+                conn.execute(
+                    "ALTER TABLE app_state ADD COLUMN tenant_payment_history TEXT NOT NULL DEFAULT '[]'"
+                )
             if "version" not in existing_columns:
                 conn.execute(
                     "ALTER TABLE app_state ADD COLUMN version INTEGER NOT NULL DEFAULT 1"
@@ -1972,6 +2223,8 @@ def init_db():
             conn.execute("UPDATE app_state SET income_entries = '[]' WHERE income_entries IS NULL")
             conn.execute("UPDATE app_state SET expense_totals = '{}' WHERE expense_totals IS NULL")
             conn.execute("UPDATE app_state SET income_totals = '{}' WHERE income_totals IS NULL")
+            conn.execute("UPDATE app_state SET tenant_profiles = '[]' WHERE tenant_profiles IS NULL")
+            conn.execute("UPDATE app_state SET tenant_payment_history = '[]' WHERE tenant_payment_history IS NULL")
             conn.execute("UPDATE app_state SET version = 1 WHERE version IS NULL OR version < 1")
 
             row = conn.execute("SELECT id FROM app_state WHERE id = 1").fetchone()
@@ -1980,9 +2233,10 @@ def init_db():
                     """
                     INSERT INTO app_state (
                         id, pin, balance, payments, incomes,
-                        expense_entries, income_entries, expense_totals, income_totals, version
+                        expense_entries, income_entries, expense_totals, income_totals,
+                        tenant_profiles, tenant_payment_history, version
                     )
-                    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
                     """,
                     (
                         DEPRECATED_PIN_VALUE,
@@ -1993,6 +2247,8 @@ def init_db():
                         json.dumps(DEFAULT_STATE["incomeEntries"], ensure_ascii=False),
                         json.dumps(DEFAULT_STATE["expenseCategoryTotals"], ensure_ascii=False),
                         json.dumps(DEFAULT_STATE["incomeCategoryTotals"], ensure_ascii=False),
+                        json.dumps(DEFAULT_STATE["tenantProfiles"], ensure_ascii=False),
+                        json.dumps(DEFAULT_STATE["tenantPaymentHistory"], ensure_ascii=False),
                     ),
                 )
 
@@ -2125,7 +2381,9 @@ def init_db():
                     expense_entries,
                     income_entries,
                     expense_totals,
-                    income_totals
+                    income_totals,
+                    tenant_profiles,
+                    tenant_payment_history
                 FROM app_state
                 WHERE id = 1
                 """
@@ -2142,6 +2400,8 @@ def init_db():
                         "incomeEntries": parse_json_column(state_row[6], []),
                         "expenseCategoryTotals": parse_json_column(state_row[7], {}),
                         "incomeCategoryTotals": parse_json_column(state_row[8], {}),
+                        "tenantProfiles": parse_json_column(state_row[9], []),
+                        "tenantPaymentHistory": parse_json_column(state_row[10], []),
                     }
                 )
                 sync_transactions_from_state(clean_state, conn)
@@ -2166,7 +2426,9 @@ def read_state():
                     expense_entries,
                     income_entries,
                     expense_totals,
-                    income_totals
+                    income_totals,
+                    tenant_profiles,
+                    tenant_payment_history
                 FROM app_state
                 WHERE id = 1
                 """
@@ -2183,6 +2445,8 @@ def read_state():
     income_entries = parse_json_column(row[6], [])
     expense_totals = parse_json_column(row[7], {})
     income_totals = parse_json_column(row[8], {})
+    tenant_profiles = parse_json_column(row[9], [])
+    tenant_payment_history = parse_json_column(row[10], [])
 
     return sanitize_state(
         {
@@ -2195,6 +2459,8 @@ def read_state():
             "incomeEntries": income_entries,
             "expenseCategoryTotals": expense_totals,
             "incomeCategoryTotals": income_totals,
+            "tenantProfiles": tenant_profiles,
+            "tenantPaymentHistory": tenant_payment_history,
         }
     )
 
@@ -2218,6 +2484,8 @@ def write_state(state, expected_version=None, ledger_events=None):
                         income_entries = ?,
                         expense_totals = ?,
                         income_totals = ?,
+                        tenant_profiles = ?,
+                        tenant_payment_history = ?,
                         version = version + 1,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE id = 1 AND version = ?
@@ -2231,6 +2499,8 @@ def write_state(state, expected_version=None, ledger_events=None):
                         json.dumps(clean_state["incomeEntries"], ensure_ascii=False),
                         json.dumps(clean_state["expenseCategoryTotals"], ensure_ascii=False),
                         json.dumps(clean_state["incomeCategoryTotals"], ensure_ascii=False),
+                        json.dumps(clean_state["tenantProfiles"], ensure_ascii=False),
+                        json.dumps(clean_state["tenantPaymentHistory"], ensure_ascii=False),
                         int(expected_version),
                     ),
                 )
@@ -2247,6 +2517,8 @@ def write_state(state, expected_version=None, ledger_events=None):
                         income_entries = ?,
                         expense_totals = ?,
                         income_totals = ?,
+                        tenant_profiles = ?,
+                        tenant_payment_history = ?,
                         version = version + 1,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE id = 1
@@ -2260,6 +2532,8 @@ def write_state(state, expected_version=None, ledger_events=None):
                         json.dumps(clean_state["incomeEntries"], ensure_ascii=False),
                         json.dumps(clean_state["expenseCategoryTotals"], ensure_ascii=False),
                         json.dumps(clean_state["incomeCategoryTotals"], ensure_ascii=False),
+                        json.dumps(clean_state["tenantProfiles"], ensure_ascii=False),
+                        json.dumps(clean_state["tenantPaymentHistory"], ensure_ascii=False),
                     ),
                 )
 
@@ -2272,9 +2546,10 @@ def write_state(state, expected_version=None, ledger_events=None):
                     """
                     INSERT INTO app_state (
                         id, pin, balance, payments, incomes,
-                        expense_entries, income_entries, expense_totals, income_totals, version
+                        expense_entries, income_entries, expense_totals, income_totals,
+                        tenant_profiles, tenant_payment_history, version
                     )
-                    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
                     """,
                     (
                         DEPRECATED_PIN_VALUE,
@@ -2285,6 +2560,8 @@ def write_state(state, expected_version=None, ledger_events=None):
                         json.dumps(clean_state["incomeEntries"], ensure_ascii=False),
                         json.dumps(clean_state["expenseCategoryTotals"], ensure_ascii=False),
                         json.dumps(clean_state["incomeCategoryTotals"], ensure_ascii=False),
+                        json.dumps(clean_state["tenantProfiles"], ensure_ascii=False),
+                        json.dumps(clean_state["tenantPaymentHistory"], ensure_ascii=False),
                     ),
                 )
 

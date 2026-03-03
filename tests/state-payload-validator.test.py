@@ -80,6 +80,34 @@ def build_valid_payload():
     ]
     payload["expenseCategoryTotals"] = {"jedzenie": 42.5}
     payload["incomeCategoryTotals"] = {"premia": 100.0}
+    payload["tenantProfiles"] = [
+        {
+            "id": 1,
+            "isActive": True,
+            "name": "Kowalski",
+            "amount": 1850.0,
+            "dueDay": 10,
+        },
+        {
+            "id": 2,
+            "isActive": False,
+            "name": "",
+            "amount": 0.0,
+            "dueDay": 10,
+        },
+    ]
+    payload["tenantPaymentHistory"] = [
+        {
+            "id": 501,
+            "tenantId": 1,
+            "month": "2026-03",
+            "amount": 1850.0,
+            "dueDate": "2026-03-10",
+            "paid": True,
+            "paidAt": "2026-03-09",
+            "incomeEntryId": 401,
+        }
+    ]
     return payload
 
 
@@ -103,7 +131,38 @@ def test_rejects_unknown_income_field():
         raise AssertionError(f"expected unknown-field error, got {errors}")
 
 
+def test_rejects_invalid_tenant_due_day():
+    payload = build_valid_payload()
+    payload["tenantProfiles"][0]["dueDay"] = 31
+    errors = server.validate_state_payload(payload)
+    fields = {err.get("field") for err in errors}
+    if "tenantProfiles[0].dueDay" not in fields:
+        raise AssertionError(f"expected invalid dueDay error, got {errors}")
+
+
+def test_rejects_duplicate_tenant_month_record():
+    payload = build_valid_payload()
+    payload["tenantPaymentHistory"].append(
+        {
+            "id": 502,
+            "tenantId": 1,
+            "month": "2026-03",
+            "amount": 1850.0,
+            "dueDate": "2026-03-10",
+            "paid": False,
+            "paidAt": "",
+            "incomeEntryId": None,
+        }
+    )
+    errors = server.validate_state_payload(payload)
+    fields = {err.get("field") for err in errors}
+    if "tenantPaymentHistory[1].month" not in fields:
+        raise AssertionError(f"expected duplicate tenant month error, got {errors}")
+
+
 if __name__ == "__main__":
     test_accepts_frontend_style_payload()
     test_rejects_unknown_income_field()
+    test_rejects_invalid_tenant_due_day()
+    test_rejects_duplicate_tenant_month_record()
     print("state payload validator tests: OK")
