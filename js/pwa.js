@@ -8,6 +8,7 @@ function isStandaloneMode() {
 
 export function createPwaController({ showToast }) {
     let deferredInstallPrompt = null;
+    let refreshingForNewServiceWorker = false;
 
     function updateInstallButtonVisibility() {
         const installButton = document.getElementById('installAppBtn');
@@ -57,9 +58,19 @@ export function createPwaController({ showToast }) {
         }
 
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/service-worker.js').catch(error => {
-                console.error('Nie udało się zarejestrować service worker:', error);
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (refreshingForNewServiceWorker) {
+                    return;
+                }
+                refreshingForNewServiceWorker = true;
+                window.location.reload();
             });
+
+            navigator.serviceWorker.register('/service-worker.js')
+                .then(registration => registration.update())
+                .catch(error => {
+                    console.error('Nie udało się zarejestrować service worker:', error);
+                });
         });
     }
 

@@ -264,7 +264,7 @@
 
             <div class="input-group">
                 <label>Kategoria wpływu</label>
-                <select id="incomeCategory" onchange="handleIncomeCategoryChange()">
+                <select id="incomeCategory" onchange="handleIncomeCategoryChange()" oninput="handleIncomeCategoryChange()">
                     <option value="premia">🎁 Premia</option>
                     <option value="rodzice">👨‍👩‍👧 Rodzice</option>
                     <option value="inne">✨ Inne</option>
@@ -322,7 +322,7 @@
 
             <div class="input-group">
                 <label>Kategoria wydatku</label>
-                <select id="paymentCategory" onchange="handlePaymentCategoryChange()">
+                <select id="paymentCategory" onchange="handlePaymentCategoryChange()" oninput="handlePaymentCategoryChange()">
                     <option value="jedzenie">🍽️ Jedzenie</option>
                     <option value="paliwo">⛽ Paliwo</option>
                     <option value="lekarstwa">💊 Lekarstwa</option>

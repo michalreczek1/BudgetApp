@@ -1,4 +1,4 @@
-const CACHE_NAME = "budget-app-static-v20";
+const CACHE_NAME = "budget-app-static-v21";
 const STATIC_ASSETS = [
   "/",
   "/budget-app.html",
@@ -21,6 +21,59 @@ const STATIC_ASSETS = [
   "/icon-192.png",
   "/icon-512.png",
 ];
+
+const STATIC_ASSET_PATHS = new Set(STATIC_ASSETS);
+
+function shouldUseNetworkFirst(requestUrl, request) {
+  if (request.mode === "navigate") {
+    return true;
+  }
+
+  if (STATIC_ASSET_PATHS.has(requestUrl.pathname)) {
+    return true;
+  }
+
+  return ["script", "style", "document"].includes(request.destination);
+}
+
+async function networkFirst(request) {
+  const cache = await caches.open(CACHE_NAME);
+
+  try {
+    const networkResponse = await fetch(request);
+    if (networkResponse && networkResponse.status === 200) {
+      cache.put(request, networkResponse.clone());
+    }
+    return networkResponse;
+  } catch (error) {
+    const cachedResponse = await caches.match(request);
+    if (cachedResponse) {
+      return cachedResponse;
+    }
+
+    if (request.mode === "navigate") {
+      return caches.match("/budget-app.html");
+    }
+
+    throw error;
+  }
+}
+
+async function cacheFirst(request) {
+  const cachedResponse = await caches.match(request);
+  if (cachedResponse) {
+    return cachedResponse;
+  }
+
+  const networkResponse = await fetch(request);
+  if (!networkResponse || networkResponse.status !== 200) {
+    return networkResponse;
+  }
+
+  const cache = await caches.open(CACHE_NAME);
+  cache.put(request, networkResponse.clone());
+  return networkResponse;
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -53,30 +106,9 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (event.request.mode === "navigate") {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match("/budget-app.html"))
-    );
-    return;
-  }
-
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
-      return fetch(event.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200) {
-          return networkResponse;
-        }
-
-        const responseClone = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseClone);
-        });
-        return networkResponse;
-      });
-    })
+    shouldUseNetworkFirst(requestUrl, event.request)
+      ? networkFirst(event.request)
+      : cacheFirst(event.request)
   );
 });

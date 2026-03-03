@@ -20,6 +20,8 @@ export function createUiModalsController({
 
         const isOther = String(select.value || '').trim().toLowerCase() === 'inne';
         group.classList.toggle('hidden', !isOther);
+        group.style.display = isOther ? 'block' : 'none';
+        group.setAttribute('aria-hidden', isOther ? 'false' : 'true');
         input.disabled = !isOther;
         if (!isOther) {
             input.value = '';
