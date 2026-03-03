@@ -79,12 +79,14 @@ export function createTenantPaymentsController({
     function collectTenantProfilesFromModal() {
         const profiles = [];
         for (let tenantId = 1; tenantId <= 7; tenantId += 1) {
-            const isActive = Boolean(document.getElementById(`tenantActive${tenantId}`)?.checked);
+            const isMarkedActive = Boolean(document.getElementById(`tenantActive${tenantId}`)?.checked);
             const name = normalizeUserText(document.getElementById(`tenantName${tenantId}`)?.value);
             const amountInput = document.getElementById(`tenantAmount${tenantId}`);
             const dueDayInput = document.getElementById(`tenantDueDay${tenantId}`);
             const amount = roundCurrency(Number(amountInput?.value || 0));
             const dueDay = Number(dueDayInput?.value);
+            const hasEnteredTenantData = Boolean(name) || (Number.isFinite(amount) && amount > 0);
+            const isActive = isMarkedActive || hasEnteredTenantData;
 
             if (isActive) {
                 if (!name) {

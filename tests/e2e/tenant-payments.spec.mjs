@@ -81,13 +81,13 @@ test('tenant payments flow updates balance, analysis and monthly state', async (
     await page.getByTitle('Wpłaty najemców').click();
     await expect(page.locator('#tenantPaymentsModal')).toBeVisible();
 
-    await page.locator('#tenantActive1').check();
     await page.fill('#tenantName1', 'Kowalski');
     await page.fill('#tenantAmount1', '1800');
     await page.fill('#tenantDueDay1', '1');
     await page.getByRole('button', { name: 'Zapisz dane najemców' }).click();
 
     await expect(page.locator('#tenantPaymentsSummary')).toContainText('Po terminie: 1');
+    await expect(page.locator('#tenantActive1')).toBeChecked();
     await expect(page.locator('#tenantDashboardSummary')).toContainText('Oczekuje 1 800');
     await expect(page.locator('#tenantDashboardList')).toContainText('Kowalski');
     await expect(page.locator('#tenantDashboardList')).toContainText('Po terminie');
