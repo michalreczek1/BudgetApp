@@ -483,6 +483,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
             changeTenantPaymentsMonth,
             renderTenantPayments,
             renderTenantDashboardReport,
+            toggleTenantDashboardPaid,
             saveTenantProfiles,
             markTenantAsPaid,
             undoTenantPayment
@@ -1654,6 +1655,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
             selectPaymentFrequency,
             toggleMonth,
             saveTenantProfiles,
+            toggleTenantDashboardPaid,
             markTenantAsPaid,
             undoTenantPayment,
             getEditingIncomeId: () => editingIncomeId,

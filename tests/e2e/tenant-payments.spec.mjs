@@ -88,17 +88,22 @@ test('tenant payments flow updates balance, analysis and monthly state', async (
 
     await expect(page.locator('#tenantPaymentsSummary')).toContainText('Po terminie: 1');
     await expect(page.locator('#tenantActive1')).toBeChecked();
-    await expect(page.locator('#tenantDashboardSummary')).toContainText('Oczekuje 1 800');
-    await expect(page.locator('#tenantDashboardList')).toContainText('Kowalski');
-    await expect(page.locator('#tenantDashboardList')).toContainText('Po terminie');
+    await expect(page.locator('#tenantDashboardSummary')).toContainText('0/1 zapłaciło');
+    await expect(page.locator('#tenantDashboardList')).toContainText('Nazwisko');
+    await expect(page.locator('#tenantDashboardList')).toContainText('Termin');
+    await expect(page.locator('#tenantDashboardList')).toContainText('Kwota');
     await expect(page.locator('#tenantDashboardList')).toContainText('Zapłacił');
+    await expect(page.locator('#tenantDashboardList')).toContainText('Kowalski');
+    await expect(page.locator('.tenant-sheet-row-overdue')).toContainText('Kowalski');
+    await expect(page.locator('#tenantDashboardList').getByRole('button')).toHaveCount(0);
+    await expect(page.getByLabel('Zapłacił Kowalski')).not.toBeChecked();
 
     await page.locator('#tenantPaymentsModal').getByRole('button', { name: 'Zamknij' }).click();
-    await page.locator('#tenantDashboardList').getByRole('button', { name: 'Zapłacił' }).click();
+    await page.getByLabel('Zapłacił Kowalski').check();
     await expect(page.locator('#currentBalance')).toContainText('1 800');
-    await expect(page.locator('#tenantDashboardSummary')).toContainText('Wpłacono 1 800');
-    await expect(page.locator('#tenantDashboardList')).toContainText('Zapłacono');
-    await expect(page.locator('#tenantDashboardList')).toContainText('Cofnij');
+    await expect(page.locator('#tenantDashboardSummary')).toContainText('1/1 zapłaciło');
+    await expect(page.getByLabel('Zapłacił Kowalski')).toBeChecked();
+    await expect(page.locator('.tenant-sheet-row-overdue')).toHaveCount(0);
 
     await page.getByTitle('Analiza wpływów').click();
     await expect(page.locator('#incomeAnalysisModal')).toBeVisible();
@@ -115,10 +120,10 @@ test('tenant payments flow updates balance, analysis and monthly state', async (
     await page.locator('#tenantPaymentsMonth').dispatchEvent('change');
     await expect(page.locator('#tenantPaymentsSummary')).toContainText('Zapłacono: 1');
     await page.locator('#tenantPaymentsModal').getByRole('button', { name: 'Zamknij' }).click();
-    await page.locator('#tenantDashboardList').getByRole('button', { name: 'Cofnij' }).click();
+    await page.getByLabel('Zapłacił Kowalski').uncheck();
     await page.getByTitle('Wpłaty najemców').click();
     await expect(page.locator('#tenantPaymentsSummary')).toContainText('Po terminie: 1');
     await expect(page.locator('#currentBalance')).toContainText('0,00');
-    await expect(page.locator('#tenantDashboardSummary')).toContainText('Oczekuje 1 800');
-    await expect(page.locator('#tenantDashboardList')).toContainText('Po terminie');
+    await expect(page.locator('#tenantDashboardSummary')).toContainText('0/1 zapłaciło');
+    await expect(page.locator('.tenant-sheet-row-overdue')).toContainText('Kowalski');
 });

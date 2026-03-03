@@ -13,6 +13,15 @@ function generateEntityId() {
     return Date.now() + Math.floor(Math.random() * 1000);
 }
 
+function escapeHtmlText(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function getSelectedMonthValue(inputId, getMonthInputValue) {
     const input = document.getElementById(inputId);
     if (!input) {
@@ -42,6 +51,8 @@ export function createTenantPaymentsController({
     flushStateSave,
     renderIncomeAnalysis
 }) {
+    const pendingDashboardToggleTenantIds = new Set();
+
     function readProfiles() {
         return sanitizeTenantProfiles(parseStoredJSON(storageKeys.TENANT_PROFILES, []));
     }
@@ -143,43 +154,60 @@ export function createTenantPaymentsController({
         monthElement.textContent = formattedMonth.charAt(0).toUpperCase() + formattedMonth.slice(1);
 
         if (summary.active === 0) {
-            summaryElement.textContent = 'Brak aktywnych najemców. Otwórz moduł i uzupełnij dane lokatorów.';
+            summaryElement.textContent = 'Brak aktywnych najemców';
             listElement.innerHTML = `
-                <div class="empty-state tenant-report-empty">
-                    <div class="icon">🏠</div>
-                    <p>Raport pojawi się po zapisaniu aktywnych najemców.</p>
+                <div class="tenant-report-empty">
+                    <span>Dodaj lokatorów w module, aby zobaczyć szybki raport.</span>
+                    <button type="button" class="btn btn-secondary tenant-open-btn" onclick="openTenantPaymentsModal()">Otwórz moduł</button>
                 </div>
             `;
             return;
         }
 
-        summaryElement.textContent = `Wpłacono ${formatCurrencyPLN(summary.paidAmount)} z ${formatCurrencyPLN(summary.expectedAmount)} • Oczekuje ${formatCurrencyPLN(summary.pendingAmount)} • Po terminie ${formatCurrencyPLN(summary.overdueAmount)}`;
-        listElement.innerHTML = monthRows
+        summaryElement.textContent = `${summary.paid}/${summary.active} zapłaciło • ${formatCurrencyPLN(summary.paidAmount)} / ${formatCurrencyPLN(summary.expectedAmount)}`;
+        const rowsMarkup = monthRows
             .filter(row => row.profile.isActive)
             .map(row => {
                 const amount = Number(row.historyRecord?.amount) > 0
                     ? Number(row.historyRecord.amount)
                     : Number(row.profile.amount) || 0;
-                const metaLabel = row.historyRecord?.paidAt
-                    ? `Zaksięgowano ${formatDateToPolish(row.historyRecord.paidAt)}`
-                    : `Termin ${formatDateToPolish(row.dueDate)}`;
+                const isPaid = row.historyRecord?.paid === true;
+                const isPending = pendingDashboardToggleTenantIds.has(Number(row.profile.id));
+                const rowClassNames = [
+                    'tenant-sheet-row',
+                    row.status?.key === 'overdue' ? 'tenant-sheet-row-overdue' : '',
+                    isPending ? 'tenant-sheet-row-pending' : ''
+                ].filter(Boolean).join(' ');
                 return `
-                    <div class="tenant-report-row">
-                        <div class="tenant-report-name-wrap">
-                            <div class="tenant-report-name">${row.profile.name}</div>
-                            <div class="tenant-report-meta">${metaLabel}</div>
-                        </div>
-                        <div class="tenant-report-right">
-                            <div class="tenant-report-amount">${formatCurrencyPLN(amount)}</div>
-                            <span class="tenant-status-badge tenant-status-${row.status.key}">${row.status.label}</span>
-                            ${row.historyRecord?.paid
-                                ? `<button type="button" class="btn btn-secondary tenant-report-action" onclick="undoTenantPayment(${row.profile.id}, '${getCurrentMonthValue()}')">Cofnij</button>`
-                                : `<button type="button" class="btn btn-primary tenant-report-action" onclick="markTenantAsPaid(${row.profile.id}, '${getCurrentMonthValue()}')">Zapłacił</button>`}
-                        </div>
+                    <div class="${rowClassNames}" role="row">
+                        <div class="tenant-sheet-cell tenant-sheet-name">${escapeHtmlText(row.profile.name)}</div>
+                        <div class="tenant-sheet-cell tenant-sheet-due">${formatDateToPolish(row.dueDate)}</div>
+                        <div class="tenant-sheet-cell tenant-sheet-amount">${formatCurrencyPLN(amount)}</div>
+                        <label class="tenant-sheet-cell tenant-sheet-paid">
+                            <input
+                                type="checkbox"
+                                class="tenant-sheet-checkbox"
+                                aria-label="Zapłacił ${escapeHtmlText(row.profile.name)}"
+                                ${isPaid ? 'checked' : ''}
+                                ${isPending ? 'disabled' : ''}
+                                onclick="toggleTenantDashboardPaid(${row.profile.id}, this.checked)"
+                            >
+                        </label>
                     </div>
                 `;
             })
             .join('');
+        listElement.innerHTML = `
+            <div class="tenant-sheet" role="table" aria-label="Raport najemców">
+                <div class="tenant-sheet-header" role="row">
+                    <div class="tenant-sheet-cell tenant-sheet-name">Nazwisko</div>
+                    <div class="tenant-sheet-cell tenant-sheet-due">Termin</div>
+                    <div class="tenant-sheet-cell tenant-sheet-amount">Kwota</div>
+                    <div class="tenant-sheet-cell tenant-sheet-paid">Zapłacił</div>
+                </div>
+                ${rowsMarkup}
+            </div>
+        `;
     }
 
     function renderTenantPayments() {
@@ -260,6 +288,28 @@ export function createTenantPaymentsController({
 
     function changeTenantPaymentsMonth() {
         renderTenantPayments();
+    }
+
+    async function toggleTenantDashboardPaid(tenantId, isChecked) {
+        const normalizedTenantId = Number(tenantId);
+        if (!Number.isInteger(normalizedTenantId) || pendingDashboardToggleTenantIds.has(normalizedTenantId)) {
+            renderTenantDashboardReport();
+            return;
+        }
+
+        pendingDashboardToggleTenantIds.add(normalizedTenantId);
+        renderTenantDashboardReport();
+
+        try {
+            if (isChecked) {
+                await markTenantAsPaid(normalizedTenantId, getCurrentMonthValue());
+            } else {
+                await undoTenantPayment(normalizedTenantId, getCurrentMonthValue());
+            }
+        } finally {
+            pendingDashboardToggleTenantIds.delete(normalizedTenantId);
+            renderTenantDashboardReport();
+        }
     }
 
     async function saveTenantProfiles() {
@@ -384,6 +434,7 @@ export function createTenantPaymentsController({
         changeTenantPaymentsMonth,
         renderTenantPayments,
         renderTenantDashboardReport,
+        toggleTenantDashboardPaid,
         saveTenantProfiles,
         markTenantAsPaid,
         undoTenantPayment
