@@ -748,14 +748,19 @@
         }
 
         .tenant-report-section {
-            cursor: pointer;
-            transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+            border-color: rgba(79, 133, 255, 0.16);
         }
 
-        .tenant-report-section:hover {
-            border-color: rgba(79, 133, 255, 0.28);
-            transform: translateY(-1px);
-            box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+        .tenant-report-header {
+            align-items: center;
+            gap: 12px;
+        }
+
+        .tenant-report-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
         }
 
         .tenant-report-month {
@@ -815,6 +820,11 @@
             gap: 12px;
             flex-wrap: wrap;
             justify-content: flex-end;
+        }
+
+        .tenant-report-action,
+        .tenant-open-btn {
+            min-width: 108px;
         }
 
         .tenant-report-amount {
@@ -1361,6 +1371,15 @@
             .tenant-report-right {
                 flex-direction: column;
                 align-items: stretch;
+            }
+
+            .tenant-report-header {
+                align-items: flex-start;
+            }
+
+            .tenant-report-header-actions {
+                width: 100%;
+                justify-content: space-between;
             }
 
             .tenant-card-head,

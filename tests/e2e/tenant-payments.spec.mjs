@@ -34,8 +34,6 @@ async function waitForServer() {
     throw new Error('Server did not start in time');
 }
 
-test.describe.configure({ mode: 'serial' });
-
 test.beforeAll(async () => {
     serverProcess = spawn(
         'python',
@@ -78,6 +76,7 @@ test('tenant payments flow updates balance, analysis and monthly state', async (
     await login(page);
 
     await expect(page.locator('#tenantDashboardSummary')).toContainText('Brak aktywnych najemców');
+    await expect(page.locator('.tenant-report-section')).toBeVisible();
 
     await page.getByTitle('Wpłaty najemców').click();
     await expect(page.locator('#tenantPaymentsModal')).toBeVisible();
@@ -92,14 +91,15 @@ test('tenant payments flow updates balance, analysis and monthly state', async (
     await expect(page.locator('#tenantDashboardSummary')).toContainText('Oczekuje 1 800');
     await expect(page.locator('#tenantDashboardList')).toContainText('Kowalski');
     await expect(page.locator('#tenantDashboardList')).toContainText('Po terminie');
+    await expect(page.locator('#tenantDashboardList')).toContainText('Zapłacił');
 
-    await page.getByRole('button', { name: 'Zaksięguj wpłatę' }).click();
-    await expect(page.locator('#tenantPaymentsSummary')).toContainText('Zapłacono: 1');
+    await page.locator('#tenantPaymentsModal').getByRole('button', { name: 'Zamknij' }).click();
+    await page.locator('#tenantDashboardList').getByRole('button', { name: 'Zapłacił' }).click();
     await expect(page.locator('#currentBalance')).toContainText('1 800');
     await expect(page.locator('#tenantDashboardSummary')).toContainText('Wpłacono 1 800');
     await expect(page.locator('#tenantDashboardList')).toContainText('Zapłacono');
+    await expect(page.locator('#tenantDashboardList')).toContainText('Cofnij');
 
-    await page.locator('#tenantPaymentsModal').getByRole('button', { name: 'Zamknij' }).click();
     await page.getByTitle('Analiza wpływów').click();
     await expect(page.locator('#incomeAnalysisModal')).toBeVisible();
     await expect(page.locator('#incomeAnalysisList')).toContainText('najem');
@@ -114,7 +114,9 @@ test('tenant payments flow updates balance, analysis and monthly state', async (
     await page.fill('#tenantPaymentsMonth', '2026-03');
     await page.locator('#tenantPaymentsMonth').dispatchEvent('change');
     await expect(page.locator('#tenantPaymentsSummary')).toContainText('Zapłacono: 1');
-    await page.getByRole('button', { name: 'Cofnij wpłatę' }).click();
+    await page.locator('#tenantPaymentsModal').getByRole('button', { name: 'Zamknij' }).click();
+    await page.locator('#tenantDashboardList').getByRole('button', { name: 'Cofnij' }).click();
+    await page.getByTitle('Wpłaty najemców').click();
     await expect(page.locator('#tenantPaymentsSummary')).toContainText('Po terminie: 1');
     await expect(page.locator('#currentBalance')).toContainText('0,00');
     await expect(page.locator('#tenantDashboardSummary')).toContainText('Oczekuje 1 800');

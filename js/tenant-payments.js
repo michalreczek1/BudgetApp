@@ -72,6 +72,10 @@ export function createTenantPaymentsController({
         return getSelectedMonthValue('tenantPaymentsMonth', getMonthInputValue);
     }
 
+    function getCurrentMonthValue() {
+        return getMonthInputValue(new Date());
+    }
+
     function collectTenantProfilesFromModal() {
         const profiles = [];
         for (let tenantId = 1; tenantId <= 7; tenantId += 1) {
@@ -166,6 +170,9 @@ export function createTenantPaymentsController({
                         <div class="tenant-report-right">
                             <div class="tenant-report-amount">${formatCurrencyPLN(amount)}</div>
                             <span class="tenant-status-badge tenant-status-${row.status.key}">${row.status.label}</span>
+                            ${row.historyRecord?.paid
+                                ? `<button type="button" class="btn btn-secondary tenant-report-action" onclick="undoTenantPayment(${row.profile.id}, '${getCurrentMonthValue()}')">Cofnij</button>`
+                                : `<button type="button" class="btn btn-primary tenant-report-action" onclick="markTenantAsPaid(${row.profile.id}, '${getCurrentMonthValue()}')">Zapłacił</button>`}
                         </div>
                     </div>
                 `;
@@ -266,7 +273,7 @@ export function createTenantPaymentsController({
         showToast('Dane najemców zostały zapisane.', 'success');
     }
 
-    async function markTenantAsPaid(tenantId) {
+    async function markTenantAsPaid(tenantId, monthOverride = '') {
         const profiles = readProfiles();
         const profile = profiles.find(item => Number(item.id) === Number(tenantId));
         if (!profile || !profile.isActive) {
@@ -274,7 +281,9 @@ export function createTenantPaymentsController({
             return;
         }
 
-        const monthValue = getTenantMonthValue();
+        const monthValue = /^\d{4}-\d{2}$/.test(String(monthOverride || ''))
+            ? String(monthOverride)
+            : getTenantMonthValue();
         const history = readHistory();
         const existingRecord = getTenantRecordForMonth(history, profile.id, monthValue);
         if (existingRecord?.paid) {
@@ -319,8 +328,10 @@ export function createTenantPaymentsController({
         showToast(`Zaksięgowano wpłatę: ${profile.name}`, 'success');
     }
 
-    async function undoTenantPayment(tenantId) {
-        const monthValue = getTenantMonthValue();
+    async function undoTenantPayment(tenantId, monthOverride = '') {
+        const monthValue = /^\d{4}-\d{2}$/.test(String(monthOverride || ''))
+            ? String(monthOverride)
+            : getTenantMonthValue();
         const history = readHistory();
         const record = getTenantRecordForMonth(history, tenantId, monthValue);
         if (!record?.paid) {

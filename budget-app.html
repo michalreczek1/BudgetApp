@@ -81,20 +81,6 @@
             </div>
         </div>
 
-        <div class="payments-section tenant-report-section clickable" onclick="openTenantPaymentsModal()" role="button" tabindex="0" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openTenantPaymentsModal(); }" title="Kliknij, aby otworzyć moduł najemców">
-            <div class="section-header">
-                <h2>🏠 Raport najemców</h2>
-                <span class="tenant-report-month" id="tenantDashboardMonth">-</span>
-            </div>
-            <div class="tenant-report-summary" id="tenantDashboardSummary">Brak aktywnych najemców. Otwórz moduł i uzupełnij dane lokatorów.</div>
-            <div class="tenant-report-list" id="tenantDashboardList">
-                <div class="empty-state tenant-report-empty">
-                    <div class="icon">🏠</div>
-                    <p>Raport pojawi się po zapisaniu aktywnych najemców.</p>
-                </div>
-            </div>
-        </div>
-
         <!-- Payments List -->
         <div class="payments-section">
             <div class="section-header">
@@ -144,6 +130,23 @@
                 <div class="text">
                     <h3>Dodaj płatność</h3>
                     <p>Zaplanuj wydatek</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="payments-section tenant-report-section">
+            <div class="section-header tenant-report-header">
+                <h2>🏠 Raport najemców</h2>
+                <div class="tenant-report-header-actions">
+                    <span class="tenant-report-month" id="tenantDashboardMonth">-</span>
+                    <button type="button" class="btn btn-secondary tenant-open-btn" onclick="openTenantPaymentsModal()">Otwórz moduł</button>
+                </div>
+            </div>
+            <div class="tenant-report-summary" id="tenantDashboardSummary">Brak aktywnych najemców. Otwórz moduł i uzupełnij dane lokatorów.</div>
+            <div class="tenant-report-list" id="tenantDashboardList">
+                <div class="empty-state tenant-report-empty">
+                    <div class="icon">🏠</div>
+                    <p>Raport pojawi się po zapisaniu aktywnych najemców.</p>
                 </div>
             </div>
         </div>
