@@ -90,6 +90,7 @@ STATIC_FILE_WHITELIST = {
     "/js/ui-modals.js": "js/ui-modals.js",
     "/js/scheduling.js": "js/scheduling.js",
     "/js/actions.js": "js/actions.js",
+    "/js/cash-forecast.js": "js/cash-forecast.js",
     "/js/state.js": "js/state.js",
     "/service-worker.js": "service-worker.js",
     "/manifest.webmanifest": "manifest.webmanifest",
