@@ -18,6 +18,7 @@ import { createRenderController } from './js/render.js';
 import { createAnalysisController } from './js/analysis.js';
 import { createUiModalsController } from './js/ui-modals.js';
 import { createActionsController } from './js/actions.js';
+import { calculateAvailableCashForecast } from './js/cash-forecast.js';
 import {
     normalizeDate,
     isOccurrencePaid,
@@ -403,6 +404,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
             getIncomeOccurrenceForMonth,
             isIncomeOccurrenceReceived,
             getNextIncomeOccurrenceFromDate,
+            calculateAvailableCashForecast,
             parseDateString,
             formatDateToPolish,
             formatCurrencyPLN,

@@ -9,6 +9,7 @@ export function createRenderController({
     getIncomeOccurrenceForMonth,
     isIncomeOccurrenceReceived,
     getNextIncomeOccurrenceFromDate,
+    calculateAvailableCashForecast,
     parseDateString,
     formatDateToPolish,
     formatCurrencyPLN,
@@ -62,25 +63,19 @@ export function createRenderController({
 
     function updateCalculations() {
         const balance = parseFloat(appStorage.getItem(storageKeys.BALANCE)) || 0;
-
-        let totalPayments = 0;
         const paymentsStored = appStorage.getItem(storageKeys.PAYMENTS);
-        if (paymentsStored) {
-            const payments = JSON.parse(paymentsStored);
-            const today = normalizeDate(new Date());
-
-            payments.forEach(payment => {
-                const occurrenceInCurrentMonth = getPaymentOccurrenceForMonth(payment, today);
-                if (!occurrenceInCurrentMonth || isOccurrencePaid(payment, occurrenceInCurrentMonth)) {
-                    return;
-                }
-
-                totalPayments += payment.amount;
-            });
-        }
-
-        const afterPayments = balance - totalPayments;
+        const incomesStored = appStorage.getItem(storageKeys.INCOMES);
+        const payments = paymentsStored ? JSON.parse(paymentsStored) : [];
+        const incomes = incomesStored ? JSON.parse(incomesStored) : [];
+        const forecast = calculateAvailableCashForecast({
+            balance,
+            payments,
+            incomes,
+            today: normalizeDate(new Date())
+        });
+        const afterPayments = forecast.availableCash;
         const afterPaymentsElement = document.getElementById('afterPayments');
+        const afterPaymentsSubtext = document.getElementById('afterPaymentsSubtext');
         afterPaymentsElement.textContent = formatCurrencyPLN(afterPayments);
 
         if (afterPayments > 0) {
@@ -89,7 +84,25 @@ export function createRenderController({
         } else if (afterPayments < 0) {
             afterPaymentsElement.classList.add('negative');
             afterPaymentsElement.classList.remove('positive');
+        } else {
+            afterPaymentsElement.classList.remove('positive');
+            afterPaymentsElement.classList.remove('negative');
         }
+
+        if (!afterPaymentsSubtext) {
+            return;
+        }
+
+        if (forecast.reserveAmount <= 0) {
+            afterPaymentsSubtext.textContent = forecast.nextIncomeDate
+                ? `Brak płatności do wpływu ${formatDateToPolish(forecast.nextIncomeDate)}`
+                : 'Brak płatności do końca miesiąca';
+            return;
+        }
+
+        afterPaymentsSubtext.textContent = forecast.horizonType === 'next-income'
+            ? `Po rezerwie do wpływu ${formatDateToPolish(forecast.horizonDate)}`
+            : 'Po rezerwie do końca miesiąca';
     }
 
     function loadIncomes() {
