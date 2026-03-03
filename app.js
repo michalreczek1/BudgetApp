@@ -1581,6 +1581,8 @@ const parseUserDateToISO = importedParseUserDateToISO;
             closeIncomeModal,
             openPaymentModal,
             closePaymentModal,
+            handleIncomeCategoryChange,
+            handlePaymentCategoryChange,
             formatDateInput,
             normalizeDateInput,
             selectIncomeFrequency,
