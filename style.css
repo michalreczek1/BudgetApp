@@ -1411,8 +1411,12 @@
 
             .tenant-sheet-header,
             .tenant-sheet-row {
-                grid-template-columns: minmax(0, 1.3fr) minmax(92px, 0.9fr) minmax(88px, 0.9fr) 72px;
+                grid-template-columns: minmax(0, 1.8fr) minmax(88px, 0.9fr) 72px;
                 column-gap: 8px;
+            }
+
+            .tenant-sheet-due {
+                display: none;
             }
 
             .tenant-report-header {
