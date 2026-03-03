@@ -63,7 +63,7 @@ export function createUiModalsController({
         document.getElementById('incomeAmount').value = '';
         const incomeCategorySelect = document.getElementById('incomeCategory');
         if (incomeCategorySelect) {
-            incomeCategorySelect.value = 'inne';
+            incomeCategorySelect.value = 'premia';
         }
         const incomeCategoryOtherInput = document.getElementById('incomeCategoryOther');
         if (incomeCategoryOtherInput) {
@@ -101,7 +101,7 @@ export function createUiModalsController({
         document.getElementById('paymentAmount').value = '';
         const paymentCategorySelect = document.getElementById('paymentCategory');
         if (paymentCategorySelect) {
-            paymentCategorySelect.value = 'inne';
+            paymentCategorySelect.value = 'jedzenie';
         }
         const paymentCategoryOtherInput = document.getElementById('paymentCategoryOther');
         if (paymentCategoryOtherInput) {

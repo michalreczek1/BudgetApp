@@ -1097,6 +1097,27 @@ const parseUserDateToISO = importedParseUserDateToISO;
             }
         }
 
+        function syncPlannedEntryNameWithCategory({ selectId, otherInputId, nameInputId }) {
+            const nameInput = document.getElementById(nameInputId);
+            const select = document.getElementById(selectId);
+            if (!nameInput || !select) {
+                return '';
+            }
+
+            const selectedCategory = normalizeUserText(select.value).toLowerCase() || 'inne';
+            if (selectedCategory === 'inne') {
+                const customCategory = normalizeUserText(document.getElementById(otherInputId)?.value);
+                nameInput.value = customCategory;
+                return customCategory;
+            }
+
+            const optionLabel = normalizeUserText(
+                select.options[select.selectedIndex]?.textContent || selectedCategory
+            );
+            nameInput.value = optionLabel;
+            return optionLabel;
+        }
+
         function resolvePlannedEntryCategory({ selectId, otherInputId, label }) {
             const select = document.getElementById(selectId);
             if (!select) {
@@ -1310,7 +1331,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
                 type: 'expense',
                 selectId: 'paymentCategory',
                 otherInputId: 'paymentCategoryOther',
-                category: payment.category || 'inne'
+                category: payment.category || payment.name || 'inne'
             });
             handlePaymentCategoryChange();
             document.getElementById('paymentDate').value = formatDateToPolish(payment.date);
@@ -1442,7 +1463,6 @@ const parseUserDateToISO = importedParseUserDateToISO;
         }
 
         function saveIncome() {
-            const incomeCategorySelect = document.getElementById('incomeCategory');
             const incomeCategoryValue = resolvePlannedEntryCategory({
                 selectId: 'incomeCategory',
                 otherInputId: 'incomeCategoryOther',
@@ -1451,17 +1471,11 @@ const parseUserDateToISO = importedParseUserDateToISO;
             if (!incomeCategoryValue) {
                 return;
             }
-            const incomeNameInput = document.getElementById('incomeName');
-            if (incomeNameInput) {
-                const categoryLabel = incomeCategorySelect
-                    && String(incomeCategorySelect.value || '').toLowerCase() !== 'inne'
-                    ? normalizeUserText(
-                        incomeCategorySelect.options[incomeCategorySelect.selectedIndex]?.textContent ||
-                        incomeCategoryValue
-                    )
-                    : incomeCategoryValue;
-                incomeNameInput.value = categoryLabel;
-            }
+            syncPlannedEntryNameWithCategory({
+                selectId: 'incomeCategory',
+                otherInputId: 'incomeCategoryOther',
+                nameInputId: 'incomeName'
+            });
 
             const success = saveEntry({
                 type: 'income',
@@ -1492,6 +1506,12 @@ const parseUserDateToISO = importedParseUserDateToISO;
             if (!paymentCategoryValue) {
                 return;
             }
+
+            syncPlannedEntryNameWithCategory({
+                selectId: 'paymentCategory',
+                otherInputId: 'paymentCategoryOther',
+                nameInputId: 'paymentName'
+            });
 
             const success = saveEntry({
                 type: 'expense',
