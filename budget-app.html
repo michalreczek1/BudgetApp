@@ -151,6 +151,108 @@
             </div>
         </div>
 
+        <div class="monthly-overview-section">
+            <div class="monthly-overview-card" id="monthToDateCard">
+                <button
+                    type="button"
+                    class="monthly-overview-header"
+                    id="monthToDateToggle"
+                    aria-expanded="false"
+                    aria-controls="monthToDateDetails"
+                    onclick="toggleMonthToDateCard()"
+                    onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleMonthToDateCard(); }"
+                >
+                    <div>
+                        <div class="monthly-overview-title">Saldo miesiąca</div>
+                        <div class="monthly-overview-subtext" id="monthToDateSubtext">Bieżący miesiąc do dziś</div>
+                    </div>
+                    <span class="monthly-overview-chevron" id="monthToDateChevron">⌄</span>
+                </button>
+                <div class="monthly-overview-summary">
+                    <div class="monthly-overview-summary-item">
+                        <span class="monthly-overview-summary-label">Wpływy</span>
+                        <span class="monthly-overview-summary-value" id="monthToDateCollapsedIncome">0,00 zł</span>
+                    </div>
+                    <div class="monthly-overview-summary-item">
+                        <span class="monthly-overview-summary-label">Wydatki</span>
+                        <span class="monthly-overview-summary-value" id="monthToDateCollapsedExpense">0,00 zł</span>
+                    </div>
+                    <div class="monthly-overview-summary-item">
+                        <span class="monthly-overview-summary-label">Różnica</span>
+                        <span class="monthly-overview-summary-value" id="monthToDateCollapsedBalance">0,00 zł</span>
+                    </div>
+                </div>
+                <div class="monthly-overview-details hidden" id="monthToDateDetails">
+                    <div class="monthly-overview-detail-row">
+                        <span>Wpływy zrealizowane</span>
+                        <strong id="monthToDateDetailRealizedIncome">0,00 zł</strong>
+                    </div>
+                    <div class="monthly-overview-detail-row">
+                        <span>Wpływy zaplanowane do dziś</span>
+                        <strong id="monthToDateDetailPlannedIncome">0,00 zł</strong>
+                    </div>
+                    <div class="monthly-overview-detail-row">
+                        <span>Wydatki zrealizowane</span>
+                        <strong id="monthToDateDetailRealizedExpense">0,00 zł</strong>
+                    </div>
+                    <div class="monthly-overview-detail-row">
+                        <span>Wydatki zaplanowane do dziś</span>
+                        <strong id="monthToDateDetailPlannedExpense">0,00 zł</strong>
+                    </div>
+                    <div class="monthly-overview-detail-row monthly-overview-detail-row-balance">
+                        <span>Bilans do dziś</span>
+                        <strong id="monthToDateDetailBalance">0,00 zł</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="monthly-overview-card" id="previousMonthCard">
+                <button
+                    type="button"
+                    class="monthly-overview-header"
+                    id="previousMonthToggle"
+                    aria-expanded="false"
+                    aria-controls="previousMonthDetails"
+                    onclick="togglePreviousMonthCard()"
+                    onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); togglePreviousMonthCard(); }"
+                >
+                    <div>
+                        <div class="monthly-overview-title">Poprzedni miesiąc</div>
+                        <div class="monthly-overview-subtext" id="previousMonthSubtext">-</div>
+                    </div>
+                    <span class="monthly-overview-chevron" id="previousMonthChevron">⌄</span>
+                </button>
+                <div class="monthly-overview-summary">
+                    <div class="monthly-overview-summary-item">
+                        <span class="monthly-overview-summary-label">Wpływy</span>
+                        <span class="monthly-overview-summary-value" id="previousMonthCollapsedIncome">0,00 zł</span>
+                    </div>
+                    <div class="monthly-overview-summary-item">
+                        <span class="monthly-overview-summary-label">Wydatki</span>
+                        <span class="monthly-overview-summary-value" id="previousMonthCollapsedExpense">0,00 zł</span>
+                    </div>
+                    <div class="monthly-overview-summary-item">
+                        <span class="monthly-overview-summary-label">Różnica</span>
+                        <span class="monthly-overview-summary-value" id="previousMonthCollapsedBalance">0,00 zł</span>
+                    </div>
+                </div>
+                <div class="monthly-overview-details hidden" id="previousMonthDetails">
+                    <div class="monthly-overview-detail-row">
+                        <span>Wpływy zrealizowane</span>
+                        <strong id="previousMonthDetailIncome">0,00 zł</strong>
+                    </div>
+                    <div class="monthly-overview-detail-row">
+                        <span>Wydatki zrealizowane</span>
+                        <strong id="previousMonthDetailExpense">0,00 zł</strong>
+                    </div>
+                    <div class="monthly-overview-detail-row monthly-overview-detail-row-balance">
+                        <span>Bilans miesiąca</span>
+                        <strong id="previousMonthDetailBalance">0,00 zł</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="mobile-action-dock">
             <button type="button" class="dock-btn dock-btn-balance" onclick="openBalanceModal()">💳 Aktualizuj stan</button>
             <button type="button" class="dock-btn dock-btn-income" onclick="openIncomeModal()">💵 Dodaj wpływ</button>

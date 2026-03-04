@@ -1,0 +1,138 @@
+import assert from 'node:assert/strict';
+import { calculateDashboardMonthSummary } from '../js/month-summary.js';
+
+function createPayment({
+  id,
+  amount,
+  date,
+  frequency = 'once',
+  months = [],
+  paidDates = [],
+  name = 'Platnosc'
+}) {
+  return { id, amount, date, frequency, months, paidDates, type: 'expense', name };
+}
+
+function createIncome({
+  id,
+  amount,
+  date,
+  frequency = 'once',
+  receivedDates = [],
+  category = 'premia',
+  name = 'Wplyw'
+}) {
+  return { id, amount, date, frequency, receivedDates, category, type: 'income', name };
+}
+
+function createEntry({ id, amount, date, category = 'inne', source = 'manual', name = '' }) {
+  return { id, amount, date, category, source, name, icon: '' };
+}
+
+const TODAY = new Date('2026-03-10T12:00:00');
+
+{
+  const result = calculateDashboardMonthSummary({
+    today: TODAY,
+    payments: [],
+    incomes: [],
+    expenseEntries: [],
+    incomeEntries: []
+  });
+
+  assert.equal(result.currentMonth.plannedIncomeToDate, 0);
+  assert.equal(result.currentMonth.realizedIncomeToDate, 0);
+  assert.equal(result.currentMonth.plannedExpenseToDate, 0);
+  assert.equal(result.currentMonth.realizedExpenseToDate, 0);
+  assert.equal(result.currentMonth.balanceToDate, 0);
+  assert.equal(result.previousMonth.realizedIncome, 0);
+  assert.equal(result.previousMonth.realizedExpense, 0);
+  assert.equal(result.previousMonth.balance, 0);
+}
+
+{
+  const result = calculateDashboardMonthSummary({
+    today: TODAY,
+    incomes: [
+      createIncome({ id: 1, amount: 5000, date: '2026-03-05' }),
+      createIncome({ id: 2, amount: 900, date: '2026-03-15' }),
+      createIncome({ id: 3, amount: 1100, date: '2026-01-08', frequency: 'monthly' })
+    ],
+    payments: [
+      createPayment({ id: 1, amount: 700, date: '2026-03-03' }),
+      createPayment({ id: 2, amount: 200, date: '2026-03-12' }),
+      createPayment({ id: 3, amount: 300, date: '2026-01-09', frequency: 'monthly' }),
+      createPayment({ id: 4, amount: 150, date: '2026-01-06', frequency: 'selected', months: [3, 6] })
+    ],
+    incomeEntries: [],
+    expenseEntries: []
+  });
+
+  assert.equal(result.currentMonth.plannedIncomeToDate, 6100);
+  assert.equal(result.currentMonth.plannedExpenseToDate, 1150);
+}
+
+{
+  const result = calculateDashboardMonthSummary({
+    today: TODAY,
+    payments: [],
+    incomes: [],
+    incomeEntries: [
+      createEntry({ id: 1, amount: 2500, date: '2026-03-01', category: 'premia' }),
+      createEntry({ id: 2, amount: 800, date: '2026-03-10', category: 'najem' }),
+      createEntry({ id: 3, amount: 400, date: '2026-03-18', category: 'inne' })
+    ],
+    expenseEntries: [
+      createEntry({ id: 4, amount: 200, date: '2026-03-02', category: 'jedzenie' }),
+      createEntry({ id: 5, amount: 300, date: '2026-03-10', category: 'paliwo' }),
+      createEntry({ id: 6, amount: 100, date: '2026-03-20', category: 'inne' })
+    ]
+  });
+
+  assert.equal(result.currentMonth.realizedIncomeToDate, 3300);
+  assert.equal(result.currentMonth.realizedExpenseToDate, 500);
+  assert.equal(result.currentMonth.balanceToDate, 2800);
+}
+
+{
+  const result = calculateDashboardMonthSummary({
+    today: TODAY,
+    payments: [],
+    incomes: [],
+    incomeEntries: [
+      createEntry({ id: 1, amount: 900, date: '2026-02-03', category: 'premia' }),
+      createEntry({ id: 2, amount: 300, date: '2026-03-01', category: 'premia' })
+    ],
+    expenseEntries: [
+      createEntry({ id: 3, amount: 450, date: '2026-02-05', category: 'jedzenie' }),
+      createEntry({ id: 4, amount: 100, date: '2026-03-02', category: 'jedzenie' })
+    ]
+  });
+
+  assert.equal(result.previousMonth.realizedIncome, 900);
+  assert.equal(result.previousMonth.realizedExpense, 450);
+  assert.equal(result.previousMonth.balance, 450);
+  assert.equal(result.previousMonth.monthLabel, 'Luty 2026');
+}
+
+{
+  const positive = calculateDashboardMonthSummary({
+    today: TODAY,
+    payments: [],
+    incomes: [],
+    incomeEntries: [createEntry({ id: 1, amount: 1000, date: '2026-03-08' })],
+    expenseEntries: [createEntry({ id: 2, amount: 250, date: '2026-03-07' })]
+  });
+  const negative = calculateDashboardMonthSummary({
+    today: TODAY,
+    payments: [],
+    incomes: [],
+    incomeEntries: [createEntry({ id: 3, amount: 200, date: '2026-03-08' })],
+    expenseEntries: [createEntry({ id: 4, amount: 450, date: '2026-03-07' })]
+  });
+
+  assert.equal(positive.currentMonth.balanceToDate, 750);
+  assert.equal(negative.currentMonth.balanceToDate, -250);
+}
+
+console.log('month-summary tests: OK');

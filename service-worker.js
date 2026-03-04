@@ -1,4 +1,4 @@
-const CACHE_NAME = "budget-app-static-v23";
+const CACHE_NAME = "budget-app-static-v24";
 const STATIC_ASSETS = [
   "/",
   "/budget-app.html",
@@ -16,6 +16,7 @@ const STATIC_ASSETS = [
   "/js/scheduling.js",
   "/js/actions.js",
   "/js/cash-forecast.js",
+  "/js/month-summary.js",
   "/js/tenants.js",
   "/js/tenant-payments.js",
   "/js/state.js",

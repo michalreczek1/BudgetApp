@@ -77,6 +77,12 @@ test('tenant payments flow updates balance, analysis and monthly state', async (
 
     await expect(page.locator('#tenantDashboardSummary')).toContainText('Brak aktywnych najemców');
     await expect(page.locator('.tenant-report-section')).toBeVisible();
+    await expect(page.locator('#monthToDateCard')).toBeVisible();
+    await expect(page.locator('#previousMonthCard')).toBeVisible();
+    await expect(page.locator('#monthToDateToggle')).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('#previousMonthToggle')).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('#monthToDateDetails')).toHaveClass(/hidden/);
+    await expect(page.locator('#previousMonthDetails')).toHaveClass(/hidden/);
 
     await page.getByTitle('Wpłaty najemców').click();
     await expect(page.locator('#tenantPaymentsModal')).toBeVisible();
@@ -104,6 +110,18 @@ test('tenant payments flow updates balance, analysis and monthly state', async (
     await expect(page.locator('#tenantDashboardSummary')).toContainText('1/1 zapłaciło');
     await expect(page.getByLabel('Zapłacił Kowalski')).toBeChecked();
     await expect(page.locator('.tenant-sheet-row-overdue')).toHaveCount(0);
+    await expect(page.locator('#monthToDateCollapsedIncome')).toContainText('1 800');
+    await expect(page.locator('#monthToDateCollapsedExpense')).toContainText('0,00');
+    await expect(page.locator('#monthToDateCollapsedBalance')).toContainText('1 800');
+    await page.locator('#monthToDateToggle').click();
+    await expect(page.locator('#monthToDateToggle')).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('#monthToDateDetails')).not.toHaveClass(/hidden/);
+    await expect(page.locator('#monthToDateDetailRealizedIncome')).toContainText('1 800');
+    await expect(page.locator('#monthToDateDetailPlannedIncome')).toContainText('0,00');
+    await expect(page.locator('#monthToDateDetailBalance')).toContainText('1 800');
+    await page.locator('#previousMonthToggle').click();
+    await expect(page.locator('#previousMonthToggle')).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('#previousMonthDetails')).not.toHaveClass(/hidden/);
 
     await page.getByTitle('Analiza wpływów').click();
     await expect(page.locator('#incomeAnalysisModal')).toBeVisible();
@@ -126,4 +144,6 @@ test('tenant payments flow updates balance, analysis and monthly state', async (
     await expect(page.locator('#currentBalance')).toContainText('0,00');
     await expect(page.locator('#tenantDashboardSummary')).toContainText('0/1 zapłaciło');
     await expect(page.locator('.tenant-sheet-row-overdue')).toContainText('Kowalski');
+    await expect(page.locator('#monthToDateCollapsedIncome')).toContainText('0,00');
+    await expect(page.locator('#monthToDateCollapsedBalance')).toContainText('0,00');
 });

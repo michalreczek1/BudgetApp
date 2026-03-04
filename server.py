@@ -95,6 +95,7 @@ STATIC_FILE_WHITELIST = {
     "/js/scheduling.js": "js/scheduling.js",
     "/js/actions.js": "js/actions.js",
     "/js/cash-forecast.js": "js/cash-forecast.js",
+    "/js/month-summary.js": "js/month-summary.js",
     "/js/tenants.js": "js/tenants.js",
     "/js/tenant-payments.js": "js/tenant-payments.js",
     "/js/state.js": "js/state.js",

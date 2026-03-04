@@ -10,6 +10,7 @@ export function createRenderController({
     isIncomeOccurrenceReceived,
     getNextIncomeOccurrenceFromDate,
     calculateAvailableCashForecast,
+    calculateDashboardMonthSummary,
     parseDateString,
     formatDateToPolish,
     formatCurrencyPLN,
@@ -21,6 +22,109 @@ export function createRenderController({
     markIncomeAsReceived,
     markPaymentAsPaid
 }) {
+    let isMonthToDateExpanded = false;
+    let isPreviousMonthExpanded = false;
+    let latestMonthlyOverview = null;
+
+    function parseStoredArray(key) {
+        const stored = appStorage.getItem(key);
+        return stored ? JSON.parse(stored) : [];
+    }
+
+    function applySignedState(element, value) {
+        if (!element) {
+            return;
+        }
+
+        element.classList.remove('positive', 'negative');
+        if (value > 0) {
+            element.classList.add('positive');
+        } else if (value < 0) {
+            element.classList.add('negative');
+        }
+    }
+
+    function renderMonthlyOverviewCards(monthlyOverview) {
+        latestMonthlyOverview = monthlyOverview;
+
+        const monthToDateCard = document.getElementById('monthToDateCard');
+        const previousMonthCard = document.getElementById('previousMonthCard');
+        const monthToDateToggle = document.getElementById('monthToDateToggle');
+        const previousMonthToggle = document.getElementById('previousMonthToggle');
+        const monthToDateDetails = document.getElementById('monthToDateDetails');
+        const previousMonthDetails = document.getElementById('previousMonthDetails');
+        const monthToDateChevron = document.getElementById('monthToDateChevron');
+        const previousMonthChevron = document.getElementById('previousMonthChevron');
+
+        if (
+            !monthToDateCard ||
+            !previousMonthCard ||
+            !monthToDateToggle ||
+            !previousMonthToggle ||
+            !monthToDateDetails ||
+            !previousMonthDetails
+        ) {
+            return;
+        }
+
+        const { currentMonth, previousMonth } = monthlyOverview;
+
+        document.getElementById('monthToDateSubtext').textContent = 'Bieżący miesiąc do dziś';
+        document.getElementById('monthToDateCollapsedIncome').textContent = formatCurrencyPLN(currentMonth.realizedIncomeToDate);
+        document.getElementById('monthToDateCollapsedExpense').textContent = formatCurrencyPLN(currentMonth.realizedExpenseToDate);
+        const monthToDateCollapsedBalance = document.getElementById('monthToDateCollapsedBalance');
+        monthToDateCollapsedBalance.textContent = formatCurrencyPLN(currentMonth.balanceToDate);
+        applySignedState(monthToDateCollapsedBalance, currentMonth.balanceToDate);
+
+        document.getElementById('monthToDateDetailRealizedIncome').textContent = formatCurrencyPLN(currentMonth.realizedIncomeToDate);
+        document.getElementById('monthToDateDetailPlannedIncome').textContent = formatCurrencyPLN(currentMonth.plannedIncomeToDate);
+        document.getElementById('monthToDateDetailRealizedExpense').textContent = formatCurrencyPLN(currentMonth.realizedExpenseToDate);
+        document.getElementById('monthToDateDetailPlannedExpense').textContent = formatCurrencyPLN(currentMonth.plannedExpenseToDate);
+        const monthToDateDetailBalance = document.getElementById('monthToDateDetailBalance');
+        monthToDateDetailBalance.textContent = formatCurrencyPLN(currentMonth.balanceToDate);
+        applySignedState(monthToDateDetailBalance, currentMonth.balanceToDate);
+
+        document.getElementById('previousMonthSubtext').textContent = previousMonth.monthLabel;
+        document.getElementById('previousMonthCollapsedIncome').textContent = formatCurrencyPLN(previousMonth.realizedIncome);
+        document.getElementById('previousMonthCollapsedExpense').textContent = formatCurrencyPLN(previousMonth.realizedExpense);
+        const previousMonthCollapsedBalance = document.getElementById('previousMonthCollapsedBalance');
+        previousMonthCollapsedBalance.textContent = formatCurrencyPLN(previousMonth.balance);
+        applySignedState(previousMonthCollapsedBalance, previousMonth.balance);
+
+        document.getElementById('previousMonthDetailIncome').textContent = formatCurrencyPLN(previousMonth.realizedIncome);
+        document.getElementById('previousMonthDetailExpense').textContent = formatCurrencyPLN(previousMonth.realizedExpense);
+        const previousMonthDetailBalance = document.getElementById('previousMonthDetailBalance');
+        previousMonthDetailBalance.textContent = formatCurrencyPLN(previousMonth.balance);
+        applySignedState(previousMonthDetailBalance, previousMonth.balance);
+
+        monthToDateCard.classList.toggle('expanded', isMonthToDateExpanded);
+        previousMonthCard.classList.toggle('expanded', isPreviousMonthExpanded);
+        monthToDateDetails.classList.toggle('hidden', !isMonthToDateExpanded);
+        previousMonthDetails.classList.toggle('hidden', !isPreviousMonthExpanded);
+        monthToDateToggle.setAttribute('aria-expanded', isMonthToDateExpanded ? 'true' : 'false');
+        previousMonthToggle.setAttribute('aria-expanded', isPreviousMonthExpanded ? 'true' : 'false');
+        if (monthToDateChevron) {
+            monthToDateChevron.textContent = isMonthToDateExpanded ? '⌃' : '⌄';
+        }
+        if (previousMonthChevron) {
+            previousMonthChevron.textContent = isPreviousMonthExpanded ? '⌃' : '⌄';
+        }
+    }
+
+    function toggleMonthToDateCard() {
+        isMonthToDateExpanded = !isMonthToDateExpanded;
+        if (latestMonthlyOverview) {
+            renderMonthlyOverviewCards(latestMonthlyOverview);
+        }
+    }
+
+    function togglePreviousMonthCard() {
+        isPreviousMonthExpanded = !isPreviousMonthExpanded;
+        if (latestMonthlyOverview) {
+            renderMonthlyOverviewCards(latestMonthlyOverview);
+        }
+    }
+
     function updateViewMonthLabel() {
         const currentViewDate = getCurrentViewDate();
         const labelElement = document.getElementById('currentViewMonth');
@@ -62,52 +166,49 @@ export function createRenderController({
     }
 
     function updateCalculations() {
+        const today = normalizeDate(new Date());
         const balance = parseFloat(appStorage.getItem(storageKeys.BALANCE)) || 0;
-        const paymentsStored = appStorage.getItem(storageKeys.PAYMENTS);
-        const incomesStored = appStorage.getItem(storageKeys.INCOMES);
-        const payments = paymentsStored ? JSON.parse(paymentsStored) : [];
-        const incomes = incomesStored ? JSON.parse(incomesStored) : [];
+        const payments = parseStoredArray(storageKeys.PAYMENTS);
+        const incomes = parseStoredArray(storageKeys.INCOMES);
+        const expenseEntries = parseStoredArray(storageKeys.EXPENSE_ENTRIES);
+        const incomeEntries = parseStoredArray(storageKeys.INCOME_ENTRIES);
+
         const forecast = calculateAvailableCashForecast({
             balance,
             payments,
             incomes,
-            today: normalizeDate(new Date())
+            today
         });
         const afterPayments = forecast.availableCash;
         const afterPaymentsElement = document.getElementById('afterPayments');
         const afterPaymentsSubtext = document.getElementById('afterPaymentsSubtext');
         afterPaymentsElement.textContent = formatCurrencyPLN(afterPayments);
+        applySignedState(afterPaymentsElement, afterPayments);
 
-        if (afterPayments > 0) {
-            afterPaymentsElement.classList.add('positive');
-            afterPaymentsElement.classList.remove('negative');
-        } else if (afterPayments < 0) {
-            afterPaymentsElement.classList.add('negative');
-            afterPaymentsElement.classList.remove('positive');
-        } else {
-            afterPaymentsElement.classList.remove('positive');
-            afterPaymentsElement.classList.remove('negative');
+        if (afterPaymentsSubtext) {
+            if (forecast.reserveAmount <= 0) {
+                afterPaymentsSubtext.textContent = forecast.nextIncomeDate
+                    ? `Brak płatności do wpływu ${formatDateToPolish(forecast.nextIncomeDate)}`
+                    : 'Brak płatności do końca miesiąca';
+            } else {
+                afterPaymentsSubtext.textContent = forecast.horizonType === 'next-income'
+                    ? `Po rezerwie do wpływu ${formatDateToPolish(forecast.horizonDate)}`
+                    : 'Po rezerwie do końca miesiąca';
+            }
         }
 
-        if (!afterPaymentsSubtext) {
-            return;
-        }
-
-        if (forecast.reserveAmount <= 0) {
-            afterPaymentsSubtext.textContent = forecast.nextIncomeDate
-                ? `Brak płatności do wpływu ${formatDateToPolish(forecast.nextIncomeDate)}`
-                : 'Brak płatności do końca miesiąca';
-            return;
-        }
-
-        afterPaymentsSubtext.textContent = forecast.horizonType === 'next-income'
-            ? `Po rezerwie do wpływu ${formatDateToPolish(forecast.horizonDate)}`
-            : 'Po rezerwie do końca miesiąca';
+        const monthlyOverview = calculateDashboardMonthSummary({
+            today,
+            payments,
+            incomes,
+            expenseEntries,
+            incomeEntries
+        });
+        renderMonthlyOverviewCards(monthlyOverview);
     }
 
     function loadIncomes() {
-        const stored = appStorage.getItem(storageKeys.INCOMES);
-        const incomes = stored ? JSON.parse(stored) : [];
+        const incomes = parseStoredArray(storageKeys.INCOMES);
         const currentViewDate = getCurrentViewDate();
         const today = normalizeDate(new Date());
         const viewMonth = normalizeDate(new Date(currentViewDate.getFullYear(), currentViewDate.getMonth(), 1));
@@ -224,8 +325,7 @@ export function createRenderController({
     }
 
     function loadPayments() {
-        const stored = appStorage.getItem(storageKeys.PAYMENTS);
-        const payments = stored ? JSON.parse(stored) : [];
+        const payments = parseStoredArray(storageKeys.PAYMENTS);
         const currentViewDate = getCurrentViewDate();
         const viewMonth = normalizeDate(new Date(currentViewDate.getFullYear(), currentViewDate.getMonth(), 1));
         const visiblePayments = [];
@@ -323,6 +423,8 @@ export function createRenderController({
         updateViewMonthLabel,
         changeViewMonth,
         goToCurrentMonth,
+        toggleMonthToDateCard,
+        togglePreviousMonthCard,
         loadBalance,
         updateCalculations,
         loadIncomes,

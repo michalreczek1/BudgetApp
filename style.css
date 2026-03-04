@@ -359,6 +359,128 @@
             margin-bottom: 24px;
         }
 
+        .monthly-overview-section {
+            display: grid;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .monthly-overview-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 18px;
+            padding: 18px 20px;
+            transition: border-color 0.25s ease, box-shadow 0.25s ease;
+        }
+
+        .monthly-overview-card.expanded {
+            border-color: rgba(79, 133, 255, 0.28);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+        }
+
+        .monthly-overview-header {
+            width: 100%;
+            padding: 0;
+            background: transparent;
+            border: none;
+            color: inherit;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .monthly-overview-title {
+            color: var(--text-primary);
+            font-size: 1.02rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .monthly-overview-subtext {
+            color: var(--text-secondary);
+            font-size: 0.84rem;
+        }
+
+        .monthly-overview-chevron {
+            color: var(--text-secondary);
+            font-size: 1.2rem;
+            line-height: 1;
+        }
+
+        .monthly-overview-summary {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .monthly-overview-summary-item {
+            padding: 12px 14px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .monthly-overview-summary-label {
+            display: block;
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 6px;
+        }
+
+        .monthly-overview-summary-value {
+            display: block;
+            color: var(--text-primary);
+            font-size: 1.02rem;
+            font-weight: 700;
+        }
+
+        .monthly-overview-summary-value.positive,
+        .monthly-overview-detail-row strong.positive {
+            color: var(--accent-green);
+        }
+
+        .monthly-overview-summary-value.negative,
+        .monthly-overview-detail-row strong.negative {
+            color: var(--accent-red);
+        }
+
+        .monthly-overview-details {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            display: grid;
+            gap: 10px;
+        }
+
+        .monthly-overview-detail-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            color: var(--text-secondary);
+            font-size: 0.92rem;
+        }
+
+        .monthly-overview-detail-row strong {
+            color: var(--text-primary);
+            font-size: 0.96rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .monthly-overview-detail-row-balance {
+            margin-top: 4px;
+            padding-top: 10px;
+            border-top: 1px dashed rgba(255, 255, 255, 0.08);
+        }
+
         .section-header {
             display: flex;
             justify-content: space-between;
@@ -1437,6 +1559,15 @@
             .tenant-report-empty {
                 flex-direction: column;
                 align-items: stretch;
+            }
+
+            .monthly-overview-summary {
+                grid-template-columns: 1fr;
+            }
+
+            .monthly-overview-detail-row {
+                flex-direction: column;
+                align-items: flex-start;
             }
 
             .month-selector {

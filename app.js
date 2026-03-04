@@ -19,6 +19,7 @@ import { createAnalysisController } from './js/analysis.js';
 import { createUiModalsController } from './js/ui-modals.js';
 import { createActionsController } from './js/actions.js';
 import { calculateAvailableCashForecast } from './js/cash-forecast.js';
+import { calculateDashboardMonthSummary } from './js/month-summary.js';
 import { createTenantPaymentsController } from './js/tenant-payments.js';
 import {
     normalizeDate,
@@ -413,6 +414,8 @@ const parseUserDateToISO = importedParseUserDateToISO;
             updateViewMonthLabel,
             changeViewMonth,
             goToCurrentMonth,
+            toggleMonthToDateCard,
+            togglePreviousMonthCard,
             loadBalance,
             updateCalculations,
             loadIncomes,
@@ -431,6 +434,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
             isIncomeOccurrenceReceived,
             getNextIncomeOccurrenceFromDate,
             calculateAvailableCashForecast,
+            calculateDashboardMonthSummary,
             parseDateString,
             formatDateToPolish,
             formatCurrencyPLN,
@@ -1617,6 +1621,8 @@ const parseUserDateToISO = importedParseUserDateToISO;
             logout,
             changeViewMonth,
             goToCurrentMonth,
+            toggleMonthToDateCard,
+            togglePreviousMonthCard,
             openAdminPanel,
             closeAdminPanel,
             openExpenseAnalysisModal,
