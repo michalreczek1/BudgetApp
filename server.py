@@ -48,6 +48,8 @@ VALID_PAYMENT_FREQUENCIES = {"once", "monthly", "selected"}
 VALID_INCOME_FREQUENCIES = {"once", "monthly"}
 TENANT_SLOT_COUNT = 7
 DEFAULT_TENANT_DUE_DAY = 10
+SALARY_INCOME_KEYWORDS = ("pensja", "wynagrodzenie")
+LATE_MONTH_DAY_THRESHOLD = 28
 DEFAULT_STATE = {
     "pin": DEPRECATED_PIN_VALUE,
     "version": 1,
@@ -95,6 +97,7 @@ STATIC_FILE_WHITELIST = {
     "/js/scheduling.js": "js/scheduling.js",
     "/js/actions.js": "js/actions.js",
     "/js/cash-forecast.js": "js/cash-forecast.js",
+    "/js/income-effective-month.js": "js/income-effective-month.js",
     "/js/month-summary.js": "js/month-summary.js",
     "/js/tenants.js": "js/tenants.js",
     "/js/tenant-payments.js": "js/tenant-payments.js",
@@ -196,6 +199,30 @@ def sanitize_totals(raw_totals):
         cleaned_totals[category] = amount
 
     return cleaned_totals
+
+
+def is_salary_like_income_entry(entry_name):
+    normalized_name = str(entry_name or "").strip().lower()
+    if not normalized_name:
+        return False
+    return any(keyword in normalized_name for keyword in SALARY_INCOME_KEYWORDS)
+
+
+def get_income_effective_month_value(entry_date, entry_name):
+    parsed_date = parse_iso_date(entry_date)
+    if parsed_date is None:
+        return ""
+
+    effective_year = parsed_date.year
+    effective_month = parsed_date.month
+    if is_salary_like_income_entry(entry_name) and parsed_date.day >= LATE_MONTH_DAY_THRESHOLD:
+        if effective_month == 12:
+            effective_year += 1
+            effective_month = 1
+        else:
+            effective_month += 1
+
+    return f"{effective_year:04d}-{effective_month:02d}"
 
 
 def sanitize_payment(payment):
@@ -1941,6 +1968,15 @@ def read_transactions_for_month(entry_type, month_value):
     if entry_type not in {"expense", "income"}:
         raise ValueError("Invalid transaction type")
     start_date, end_date = parse_month_range(month_value)
+    query_start_date = start_date
+    if entry_type == "income":
+        target_month_start = parse_iso_date(start_date)
+        previous_month_start = date(target_month_start.year, target_month_start.month, 1)
+        if previous_month_start.month == 1:
+            previous_month_start = date(previous_month_start.year - 1, 12, 1)
+        else:
+            previous_month_start = date(previous_month_start.year, previous_month_start.month - 1, 1)
+        query_start_date = previous_month_start.isoformat()
 
     with DB_LOCK:
         conn = sqlite3.connect(DB_PATH)
@@ -1954,7 +1990,7 @@ def read_transactions_for_month(entry_type, month_value):
                   AND entry_date < ?
                 ORDER BY entry_date DESC, id DESC
                 """,
-                (entry_type, start_date, end_date),
+                (entry_type, query_start_date, end_date),
             ).fetchall()
         finally:
             conn.close()
@@ -1983,6 +2019,10 @@ def read_transactions_for_month(entry_type, month_value):
             "name": str(row[5] or ""),
             "icon": str(row[6] or ""),
         }
+        if entry_type == "income":
+            effective_month_value = get_income_effective_month_value(entry["date"], entry["name"])
+            if effective_month_value != month_value:
+                continue
         entries.append(entry)
         totals_by_category[category] = round(totals_by_category.get(category, 0.0) + amount, 2)
         total_amount = round(total_amount + amount, 2)
