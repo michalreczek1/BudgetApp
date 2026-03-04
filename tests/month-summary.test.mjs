@@ -75,6 +75,40 @@ const TODAY = new Date('2026-03-10T12:00:00');
 {
   const result = calculateDashboardMonthSummary({
     today: TODAY,
+    incomes: [
+      createIncome({ id: 1, amount: 5000, date: '2026-03-05', receivedDates: ['2026-03-05'] }),
+      createIncome({ id: 2, amount: 900, date: '2026-03-15' }),
+      createIncome({ id: 3, amount: 1100, date: '2026-01-08', frequency: 'monthly', receivedDates: ['2026-03-08'] })
+    ],
+    payments: [
+      createPayment({ id: 1, amount: 700, date: '2026-03-03', paidDates: ['2026-03-03'] }),
+      createPayment({ id: 2, amount: 200, date: '2026-03-12' }),
+      createPayment({ id: 3, amount: 300, date: '2026-01-09', frequency: 'monthly', paidDates: ['2026-03-09'] }),
+      createPayment({ id: 4, amount: 150, date: '2026-01-06', frequency: 'selected', months: [3, 6], paidDates: ['2026-03-06'] })
+    ],
+    incomeEntries: [
+      createEntry({ id: 1, amount: 5000, date: '2026-03-05', category: 'pensja' }),
+      createEntry({ id: 2, amount: 1100, date: '2026-03-08', category: 'premia' })
+    ],
+    expenseEntries: [
+      createEntry({ id: 3, amount: 700, date: '2026-03-03', category: 'rachunki' }),
+      createEntry({ id: 4, amount: 300, date: '2026-03-09', category: 'jedzenie' }),
+      createEntry({ id: 5, amount: 150, date: '2026-03-06', category: 'ubrania' })
+    ]
+  });
+
+  assert.equal(result.currentMonth.realizedIncomeToDate, 6100);
+  assert.equal(result.currentMonth.realizedExpenseToDate, 1150);
+  assert.equal(result.currentMonth.plannedIncomeOutstanding, 900);
+  assert.equal(result.currentMonth.plannedExpenseOutstanding, 200);
+  assert.equal(result.currentMonth.projectedIncome, 7000);
+  assert.equal(result.currentMonth.projectedExpense, 1350);
+  assert.equal(result.currentMonth.projectedBalance, 5650);
+}
+
+{
+  const result = calculateDashboardMonthSummary({
+    today: TODAY,
     payments: [],
     incomes: [],
     incomeEntries: [

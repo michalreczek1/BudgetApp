@@ -71,20 +71,20 @@ export function createRenderController({
         monthToDateCard.dataset.monthValue = currentMonth.monthValue;
         previousMonthCard.dataset.monthValue = previousMonth.monthValue;
 
-        document.getElementById('monthToDateSubtext').textContent = 'Bieżący miesiąc do dziś';
-        document.getElementById('monthToDateCollapsedIncome').textContent = formatCurrencyPLN(currentMonth.realizedIncomeToDate);
-        document.getElementById('monthToDateCollapsedExpense').textContent = formatCurrencyPLN(currentMonth.realizedExpenseToDate);
+        document.getElementById('monthToDateSubtext').textContent = 'Bieżący miesiąc: realizacja + plan';
+        document.getElementById('monthToDateCollapsedIncome').textContent = formatCurrencyPLN(currentMonth.projectedIncome);
+        document.getElementById('monthToDateCollapsedExpense').textContent = formatCurrencyPLN(currentMonth.projectedExpense);
         const monthToDateCollapsedBalance = document.getElementById('monthToDateCollapsedBalance');
-        monthToDateCollapsedBalance.textContent = formatCurrencyPLN(currentMonth.balanceToDate);
-        applySignedState(monthToDateCollapsedBalance, currentMonth.balanceToDate);
+        monthToDateCollapsedBalance.textContent = formatCurrencyPLN(currentMonth.projectedBalance);
+        applySignedState(monthToDateCollapsedBalance, currentMonth.projectedBalance);
 
         document.getElementById('monthToDateDetailRealizedIncome').textContent = formatCurrencyPLN(currentMonth.realizedIncomeToDate);
-        document.getElementById('monthToDateDetailPlannedIncome').textContent = formatCurrencyPLN(currentMonth.plannedIncomeToDate);
+        document.getElementById('monthToDateDetailPlannedIncome').textContent = formatCurrencyPLN(currentMonth.plannedIncomeOutstanding);
         document.getElementById('monthToDateDetailRealizedExpense').textContent = formatCurrencyPLN(currentMonth.realizedExpenseToDate);
-        document.getElementById('monthToDateDetailPlannedExpense').textContent = formatCurrencyPLN(currentMonth.plannedExpenseToDate);
+        document.getElementById('monthToDateDetailPlannedExpense').textContent = formatCurrencyPLN(currentMonth.plannedExpenseOutstanding);
         const monthToDateDetailBalance = document.getElementById('monthToDateDetailBalance');
-        monthToDateDetailBalance.textContent = formatCurrencyPLN(currentMonth.balanceToDate);
-        applySignedState(monthToDateDetailBalance, currentMonth.balanceToDate);
+        monthToDateDetailBalance.textContent = formatCurrencyPLN(currentMonth.projectedBalance);
+        applySignedState(monthToDateDetailBalance, currentMonth.projectedBalance);
 
         document.getElementById('previousMonthSubtext').textContent = previousMonth.monthLabel;
         document.getElementById('previousMonthCollapsedIncome').textContent = formatCurrencyPLN(previousMonth.realizedIncome);

@@ -164,7 +164,7 @@
                 >
                     <div>
                         <div class="monthly-overview-title">Saldo miesiąca</div>
-                        <div class="monthly-overview-subtext" id="monthToDateSubtext">Bieżący miesiąc do dziś</div>
+                        <div class="monthly-overview-subtext" id="monthToDateSubtext">Bieżący miesiąc: realizacja + plan</div>
                     </div>
                     <span class="monthly-overview-chevron" id="monthToDateChevron">⌄</span>
                 </button>
@@ -212,7 +212,7 @@
                         onclick="openMonthToDateIncomeAnalysis()"
                         onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openMonthToDateIncomeAnalysis(); }"
                     >
-                        <span>Wpływy zaplanowane do dziś</span>
+                        <span>Wpływy planowane do końca miesiąca</span>
                         <strong id="monthToDateDetailPlannedIncome">0,00 zł</strong>
                     </div>
                     <div
@@ -232,11 +232,11 @@
                         onclick="openMonthToDateExpenseAnalysis()"
                         onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openMonthToDateExpenseAnalysis(); }"
                     >
-                        <span>Wydatki zaplanowane do dziś</span>
+                        <span>Wydatki planowane do końca miesiąca</span>
                         <strong id="monthToDateDetailPlannedExpense">0,00 zł</strong>
                     </div>
                     <div class="monthly-overview-detail-row monthly-overview-detail-row-balance">
-                        <span>Bilans do dziś</span>
+                        <span>Bilans miesiąca</span>
                         <strong id="monthToDateDetailBalance">0,00 zł</strong>
                     </div>
                 </div>

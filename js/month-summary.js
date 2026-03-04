@@ -3,7 +3,9 @@ import { roundCurrency } from './formatters.js';
 import {
     normalizeDate,
     getIncomeOccurrenceForMonth,
-    getPaymentOccurrenceForMonth
+    getPaymentOccurrenceForMonth,
+    isIncomeOccurrenceReceived,
+    isOccurrencePaid
 } from './scheduling.js';
 
 const LEGACY_SUMMARY_CATEGORIES = new Set([
@@ -58,6 +60,27 @@ function sumPlannedOccurrencesInRange(items, monthStart, rangeEnd, getOccurrence
     }, 0));
 }
 
+function sumPlannedOutstandingForMonth(items, monthStart, monthEnd, getOccurrenceForMonth, isSettledOccurrence) {
+    const safeItems = Array.isArray(items) ? items : [];
+    return roundCurrency(safeItems.reduce((sum, item) => {
+        const occurrenceDate = getOccurrenceForMonth(item, monthStart);
+        if (!occurrenceDate) {
+            return sum;
+        }
+
+        const parsedOccurrence = parseDateString(occurrenceDate);
+        if (Number.isNaN(parsedOccurrence.getTime()) || parsedOccurrence < monthStart || parsedOccurrence > monthEnd) {
+            return sum;
+        }
+
+        if (isSettledOccurrence(item, occurrenceDate)) {
+            return sum;
+        }
+
+        return sum + (Number(item?.amount) || 0);
+    }, 0));
+}
+
 function getMonthLabel(dateValue) {
     const formatted = dateValue.toLocaleDateString('pl-PL', { month: 'long', year: 'numeric' });
     return formatted.charAt(0).toUpperCase() + formatted.slice(1);
@@ -72,6 +95,7 @@ export function calculateDashboardMonthSummary({
 }) {
     const normalizedToday = normalizeDate(today || new Date());
     const currentMonthStart = getMonthStart(normalizedToday);
+    const currentMonthEnd = getMonthEnd(normalizedToday);
     const previousMonthDate = new Date(normalizedToday.getFullYear(), normalizedToday.getMonth() - 1, 1);
     const previousMonthStart = getMonthStart(previousMonthDate);
     const previousMonthEnd = getMonthEnd(previousMonthDate);
@@ -90,6 +114,22 @@ export function calculateDashboardMonthSummary({
         normalizedToday,
         getPaymentOccurrenceForMonth
     );
+    const plannedIncomeOutstanding = sumPlannedOutstandingForMonth(
+        incomes,
+        currentMonthStart,
+        currentMonthEnd,
+        getIncomeOccurrenceForMonth,
+        isIncomeOccurrenceReceived
+    );
+    const plannedExpenseOutstanding = sumPlannedOutstandingForMonth(
+        payments,
+        currentMonthStart,
+        currentMonthEnd,
+        getPaymentOccurrenceForMonth,
+        isOccurrencePaid
+    );
+    const projectedIncome = roundCurrency(realizedIncomeToDate + plannedIncomeOutstanding);
+    const projectedExpense = roundCurrency(realizedExpenseToDate + plannedExpenseOutstanding);
 
     const previousMonthRealizedIncome = sumEntriesInRange(incomeEntries, previousMonthStart, previousMonthEnd);
     const previousMonthRealizedExpense = sumEntriesInRange(expenseEntries, previousMonthStart, previousMonthEnd);
@@ -100,6 +140,11 @@ export function calculateDashboardMonthSummary({
             realizedIncomeToDate,
             plannedExpenseToDate,
             realizedExpenseToDate,
+            plannedIncomeOutstanding,
+            plannedExpenseOutstanding,
+            projectedIncome,
+            projectedExpense,
+            projectedBalance: roundCurrency(projectedIncome - projectedExpense),
             balanceToDate: roundCurrency(realizedIncomeToDate - realizedExpenseToDate),
             monthValue: formatDateString(currentMonthStart).slice(0, 7),
             monthLabel: getMonthLabel(currentMonthStart),
