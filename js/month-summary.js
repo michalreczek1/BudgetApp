@@ -14,6 +14,41 @@ const LEGACY_SUMMARY_CATEGORIES = new Set([
     'zaplanowane wpływy'
 ]);
 
+function normalizeCategory(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function isLegacySummaryEntry(entry) {
+    return LEGACY_SUMMARY_CATEGORIES.has(normalizeCategory(entry?.category));
+}
+
+function getRoundedAmount(value) {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) {
+        return 0;
+    }
+    return Math.round(numericValue * 100) / 100;
+}
+
+function hasNonLegacyDuplicate(entries, targetEntry, predicate = null) {
+    const safeEntries = Array.isArray(entries) ? entries : [];
+    const targetDate = String(targetEntry?.date || '');
+    const targetAmount = getRoundedAmount(targetEntry?.amount);
+
+    return safeEntries.some(candidate => {
+        if (candidate === targetEntry || isLegacySummaryEntry(candidate)) {
+            return false;
+        }
+        if (typeof predicate === 'function' && !predicate(candidate)) {
+            return false;
+        }
+        return (
+            String(candidate?.date || '') === targetDate &&
+            getRoundedAmount(candidate?.amount) === targetAmount
+        );
+    });
+}
+
 function getMonthStart(dateValue) {
     return normalizeDate(new Date(dateValue.getFullYear(), dateValue.getMonth(), 1));
 }
@@ -36,8 +71,11 @@ function sumEntriesInRange(entries, startDate, endDate) {
         if (!isDateInRange(entry?.date, startDate, endDate)) {
             return sum;
         }
-        const normalizedCategory = String(entry?.category || '').trim().toLowerCase();
-        if (LEGACY_SUMMARY_CATEGORIES.has(normalizedCategory)) {
+
+        if (
+            isLegacySummaryEntry(entry) &&
+            hasNonLegacyDuplicate(safeEntries, entry, candidate => isDateInRange(candidate?.date, startDate, endDate))
+        ) {
             return sum;
         }
         return sum + (Number(entry?.amount) || 0);
@@ -59,8 +97,17 @@ function sumRealizedIncomeForEffectiveMonth(entries, targetMonthValue, todayDate
             return sum;
         }
 
-        const normalizedCategory = String(entry?.category || '').trim().toLowerCase();
-        if (LEGACY_SUMMARY_CATEGORIES.has(normalizedCategory) && !isSalaryLikeIncomeEntry(entry, plannedIncomes)) {
+        if (
+            isLegacySummaryEntry(entry) &&
+            hasNonLegacyDuplicate(
+                safeEntries,
+                entry,
+                candidate => (
+                    isIncomeInEffectiveMonth(candidate, targetMonthValue, plannedIncomes) &&
+                    (!todayDate || !Number.isNaN(parseDateString(candidate?.date).getTime()) && parseDateString(candidate?.date) <= todayDate)
+                )
+            )
+        ) {
             return sum;
         }
 

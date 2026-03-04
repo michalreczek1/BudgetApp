@@ -203,6 +203,38 @@ const TODAY = new Date('2026-03-10T12:00:00');
   const result = calculateDashboardMonthSummary({
     today: TODAY,
     payments: [],
+    incomes: [
+      createIncome({
+        id: 30,
+        amount: 4000,
+        date: '2026-03-15',
+        frequency: 'monthly',
+        category: 'socjal',
+        name: '800+'
+      })
+    ],
+    incomeEntries: [
+      createEntry({
+        id: 31,
+        amount: 3000,
+        date: '2026-03-03',
+        category: 'zaplanowane wpływy',
+        source: 'planned-income',
+        name: '✨ Inne'
+      })
+    ],
+    expenseEntries: []
+  });
+
+  assert.equal(result.currentMonth.realizedIncomeToDate, 3000);
+  assert.equal(result.currentMonth.plannedIncomeOutstanding, 4000);
+  assert.equal(result.currentMonth.projectedIncome, 7000);
+}
+
+{
+  const result = calculateDashboardMonthSummary({
+    today: TODAY,
+    payments: [],
     incomes: [],
     incomeEntries: [
       createEntry({ id: 1, amount: 2500, date: '2026-03-01', category: 'premia' }),
