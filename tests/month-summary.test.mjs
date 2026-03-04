@@ -153,7 +153,50 @@ const TODAY = new Date('2026-03-10T12:00:00');
   });
 
   assert.equal(result.currentMonth.realizedIncomeToDate, 11096);
+  assert.equal(result.currentMonth.plannedIncomeOutstanding, 0);
+  assert.equal(result.currentMonth.projectedIncome, 11096);
   assert.equal(result.previousMonth.realizedIncome, 0);
+}
+
+{
+  const result = calculateDashboardMonthSummary({
+    today: TODAY,
+    payments: [],
+    incomes: [
+      createIncome({
+        id: 20,
+        amount: 11096,
+        date: '2026-02-28',
+        frequency: 'monthly',
+        receivedDates: ['2026-02-28'],
+        category: 'wynagrodzenie',
+        name: 'Wynagrodzenie'
+      }),
+      createIncome({
+        id: 21,
+        amount: 4000,
+        date: '2026-03-15',
+        frequency: 'monthly',
+        category: 'socjal',
+        name: '800+'
+      })
+    ],
+    incomeEntries: [
+      createEntry({
+        id: 22,
+        amount: 11096,
+        date: '2026-02-28',
+        category: 'wynagrodzenie',
+        name: 'Wynagrodzenie'
+      })
+    ],
+    expenseEntries: []
+  });
+
+  assert.equal(result.currentMonth.realizedIncomeToDate, 11096);
+  assert.equal(result.currentMonth.plannedIncomeToDate, 0);
+  assert.equal(result.currentMonth.plannedIncomeOutstanding, 4000);
+  assert.equal(result.currentMonth.projectedIncome, 15096);
 }
 
 {

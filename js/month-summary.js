@@ -85,7 +85,22 @@ function sumPlannedOccurrencesInRange(items, monthStart, rangeEnd, getOccurrence
     }, 0));
 }
 
-function sumPlannedOutstandingForMonth(items, monthStart, monthEnd, getOccurrenceForMonth, isSettledOccurrence) {
+function isPlannedIncomeOccurrenceInTargetMonth(item, occurrenceDate, targetMonthValue) {
+    return isIncomeInEffectiveMonth({
+        date: occurrenceDate,
+        name: item?.name,
+        category: item?.category
+    }, targetMonthValue);
+}
+
+function sumPlannedOutstandingForMonth(
+    items,
+    monthStart,
+    monthEnd,
+    getOccurrenceForMonth,
+    isSettledOccurrence,
+    shouldIncludeOccurrence = null
+) {
     const safeItems = Array.isArray(items) ? items : [];
     return roundCurrency(safeItems.reduce((sum, item) => {
         const occurrenceDate = getOccurrenceForMonth(item, monthStart);
@@ -95,6 +110,10 @@ function sumPlannedOutstandingForMonth(items, monthStart, monthEnd, getOccurrenc
 
         const parsedOccurrence = parseDateString(occurrenceDate);
         if (Number.isNaN(parsedOccurrence.getTime()) || parsedOccurrence < monthStart || parsedOccurrence > monthEnd) {
+            return sum;
+        }
+
+        if (typeof shouldIncludeOccurrence === 'function' && !shouldIncludeOccurrence(item, occurrenceDate)) {
             return sum;
         }
 
@@ -133,7 +152,15 @@ export function calculateDashboardMonthSummary({
         incomes,
         currentMonthStart,
         normalizedToday,
-        getIncomeOccurrenceForMonth
+        (income, monthDate) => {
+            const occurrenceDate = getIncomeOccurrenceForMonth(income, monthDate);
+            if (!occurrenceDate) {
+                return null;
+            }
+            return isPlannedIncomeOccurrenceInTargetMonth(income, occurrenceDate, currentMonthValue)
+                ? occurrenceDate
+                : null;
+        }
     );
     const plannedExpenseToDate = sumPlannedOccurrencesInRange(
         payments,
@@ -146,7 +173,8 @@ export function calculateDashboardMonthSummary({
         currentMonthStart,
         currentMonthEnd,
         getIncomeOccurrenceForMonth,
-        isIncomeOccurrenceReceived
+        isIncomeOccurrenceReceived,
+        (income, occurrenceDate) => isPlannedIncomeOccurrenceInTargetMonth(income, occurrenceDate, currentMonthValue)
     );
     const plannedExpenseOutstanding = sumPlannedOutstandingForMonth(
         payments,
