@@ -432,6 +432,21 @@
             border-right: none;
         }
 
+        .monthly-overview-action {
+            cursor: pointer;
+            transition: background-color 0.18s ease, transform 0.18s ease;
+        }
+
+        .monthly-overview-action:hover,
+        .monthly-overview-action:focus-visible {
+            background: rgba(255, 255, 255, 0.045);
+            outline: none;
+        }
+
+        .monthly-overview-action:active {
+            transform: translateY(1px);
+        }
+
         .monthly-overview-summary-label {
             display: block;
             color: var(--text-secondary);
@@ -476,6 +491,8 @@
             gap: 16px;
             color: var(--text-secondary);
             font-size: 0.92rem;
+            border-radius: 10px;
+            padding: 2px 4px;
         }
 
         .monthly-overview-detail-row strong {

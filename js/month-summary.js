@@ -92,6 +92,7 @@ export function calculateDashboardMonthSummary({
             plannedExpenseToDate,
             realizedExpenseToDate,
             balanceToDate: roundCurrency(realizedIncomeToDate - realizedExpenseToDate),
+            monthValue: formatDateString(currentMonthStart).slice(0, 7),
             monthLabel: getMonthLabel(currentMonthStart),
             rangeLabel: `Do ${formatDateString(normalizedToday)}`
         },
@@ -99,6 +100,7 @@ export function calculateDashboardMonthSummary({
             realizedIncome: previousMonthRealizedIncome,
             realizedExpense: previousMonthRealizedExpense,
             balance: roundCurrency(previousMonthRealizedIncome - previousMonthRealizedExpense),
+            monthValue: formatDateString(previousMonthStart).slice(0, 7),
             monthLabel: getMonthLabel(previousMonthStart)
         }
     };

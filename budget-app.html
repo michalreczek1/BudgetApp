@@ -169,11 +169,23 @@
                     <span class="monthly-overview-chevron" id="monthToDateChevron">⌄</span>
                 </button>
                 <div class="monthly-overview-summary">
-                    <div class="monthly-overview-summary-item">
+                    <div
+                        class="monthly-overview-summary-item monthly-overview-action"
+                        role="button"
+                        tabindex="0"
+                        onclick="openMonthToDateIncomeAnalysis()"
+                        onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openMonthToDateIncomeAnalysis(); }"
+                    >
                         <span class="monthly-overview-summary-label">Wpływy</span>
                         <span class="monthly-overview-summary-value" id="monthToDateCollapsedIncome">0,00 zł</span>
                     </div>
-                    <div class="monthly-overview-summary-item">
+                    <div
+                        class="monthly-overview-summary-item monthly-overview-action"
+                        role="button"
+                        tabindex="0"
+                        onclick="openMonthToDateExpenseAnalysis()"
+                        onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openMonthToDateExpenseAnalysis(); }"
+                    >
                         <span class="monthly-overview-summary-label">Wydatki</span>
                         <span class="monthly-overview-summary-value" id="monthToDateCollapsedExpense">0,00 zł</span>
                     </div>
@@ -183,19 +195,43 @@
                     </div>
                 </div>
                 <div class="monthly-overview-details hidden" id="monthToDateDetails">
-                    <div class="monthly-overview-detail-row">
+                    <div
+                        class="monthly-overview-detail-row monthly-overview-action"
+                        role="button"
+                        tabindex="0"
+                        onclick="openMonthToDateIncomeAnalysis()"
+                        onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openMonthToDateIncomeAnalysis(); }"
+                    >
                         <span>Wpływy zrealizowane</span>
                         <strong id="monthToDateDetailRealizedIncome">0,00 zł</strong>
                     </div>
-                    <div class="monthly-overview-detail-row">
+                    <div
+                        class="monthly-overview-detail-row monthly-overview-action"
+                        role="button"
+                        tabindex="0"
+                        onclick="openMonthToDateIncomeAnalysis()"
+                        onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openMonthToDateIncomeAnalysis(); }"
+                    >
                         <span>Wpływy zaplanowane do dziś</span>
                         <strong id="monthToDateDetailPlannedIncome">0,00 zł</strong>
                     </div>
-                    <div class="monthly-overview-detail-row">
+                    <div
+                        class="monthly-overview-detail-row monthly-overview-action"
+                        role="button"
+                        tabindex="0"
+                        onclick="openMonthToDateExpenseAnalysis()"
+                        onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openMonthToDateExpenseAnalysis(); }"
+                    >
                         <span>Wydatki zrealizowane</span>
                         <strong id="monthToDateDetailRealizedExpense">0,00 zł</strong>
                     </div>
-                    <div class="monthly-overview-detail-row">
+                    <div
+                        class="monthly-overview-detail-row monthly-overview-action"
+                        role="button"
+                        tabindex="0"
+                        onclick="openMonthToDateExpenseAnalysis()"
+                        onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openMonthToDateExpenseAnalysis(); }"
+                    >
                         <span>Wydatki zaplanowane do dziś</span>
                         <strong id="monthToDateDetailPlannedExpense">0,00 zł</strong>
                     </div>
@@ -223,11 +259,23 @@
                     <span class="monthly-overview-chevron" id="previousMonthChevron">⌄</span>
                 </button>
                 <div class="monthly-overview-summary">
-                    <div class="monthly-overview-summary-item">
+                    <div
+                        class="monthly-overview-summary-item monthly-overview-action"
+                        role="button"
+                        tabindex="0"
+                        onclick="openPreviousMonthIncomeAnalysis()"
+                        onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openPreviousMonthIncomeAnalysis(); }"
+                    >
                         <span class="monthly-overview-summary-label">Wpływy</span>
                         <span class="monthly-overview-summary-value" id="previousMonthCollapsedIncome">0,00 zł</span>
                     </div>
-                    <div class="monthly-overview-summary-item">
+                    <div
+                        class="monthly-overview-summary-item monthly-overview-action"
+                        role="button"
+                        tabindex="0"
+                        onclick="openPreviousMonthExpenseAnalysis()"
+                        onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openPreviousMonthExpenseAnalysis(); }"
+                    >
                         <span class="monthly-overview-summary-label">Wydatki</span>
                         <span class="monthly-overview-summary-value" id="previousMonthCollapsedExpense">0,00 zł</span>
                     </div>
@@ -237,11 +285,23 @@
                     </div>
                 </div>
                 <div class="monthly-overview-details hidden" id="previousMonthDetails">
-                    <div class="monthly-overview-detail-row">
+                    <div
+                        class="monthly-overview-detail-row monthly-overview-action"
+                        role="button"
+                        tabindex="0"
+                        onclick="openPreviousMonthIncomeAnalysis()"
+                        onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openPreviousMonthIncomeAnalysis(); }"
+                    >
                         <span>Wpływy zrealizowane</span>
                         <strong id="previousMonthDetailIncome">0,00 zł</strong>
                     </div>
-                    <div class="monthly-overview-detail-row">
+                    <div
+                        class="monthly-overview-detail-row monthly-overview-action"
+                        role="button"
+                        tabindex="0"
+                        onclick="openPreviousMonthExpenseAnalysis()"
+                        onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openPreviousMonthExpenseAnalysis(); }"
+                    >
                         <span>Wydatki zrealizowane</span>
                         <strong id="previousMonthDetailExpense">0,00 zł</strong>
                     </div>

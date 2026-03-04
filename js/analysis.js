@@ -36,14 +36,25 @@ export function createAnalysisController({
         return apiFetchTransactionsForAnalysis(entryType, monthValue);
     }
 
-    function openExpenseAnalysisModal() {
+    function getAnalysisMonthValue(monthValue) {
+        if (/^\d{4}-\d{2}$/.test(String(monthValue || ''))) {
+            return String(monthValue);
+        }
+        return getMonthInputValue(getCurrentViewDate());
+    }
+
+    function openExpenseAnalysisModalForMonth(monthValue) {
         const monthInput = document.getElementById('expenseAnalysisMonth');
-        monthInput.value = getMonthInputValue(getCurrentViewDate());
+        monthInput.value = getAnalysisMonthValue(monthValue);
         expenseDetailsVisible = false;
         document.getElementById('expenseDetailsSection').classList.add('hidden');
         document.getElementById('expenseDetailsBtn').textContent = 'Szczegóły';
         renderExpenseAnalysis();
         document.getElementById('expenseAnalysisModal').classList.add('active');
+    }
+
+    function openExpenseAnalysisModal() {
+        openExpenseAnalysisModalForMonth(getMonthInputValue(getCurrentViewDate()));
     }
 
     function closeExpenseAnalysisModal() {
@@ -57,11 +68,15 @@ export function createAnalysisController({
         document.getElementById('expenseEditAmountInput').value = '';
     }
 
-    function openIncomeAnalysisModal() {
+    function openIncomeAnalysisModalForMonth(monthValue) {
         const monthInput = document.getElementById('incomeAnalysisMonth');
-        monthInput.value = getMonthInputValue(getCurrentViewDate());
+        monthInput.value = getAnalysisMonthValue(monthValue);
         renderIncomeAnalysis();
         document.getElementById('incomeAnalysisModal').classList.add('active');
+    }
+
+    function openIncomeAnalysisModal() {
+        openIncomeAnalysisModalForMonth(getMonthInputValue(getCurrentViewDate()));
     }
 
     function closeIncomeAnalysisModal() {
@@ -71,10 +86,7 @@ export function createAnalysisController({
     function openIncomeAnalysisFromExpense() {
         const expenseMonth = document.getElementById('expenseAnalysisMonth').value;
         closeExpenseAnalysisModal();
-        const monthInput = document.getElementById('incomeAnalysisMonth');
-        monthInput.value = expenseMonth || getMonthInputValue(getCurrentViewDate());
-        renderIncomeAnalysis();
-        document.getElementById('incomeAnalysisModal').classList.add('active');
+        openIncomeAnalysisModalForMonth(expenseMonth || getMonthInputValue(getCurrentViewDate()));
     }
 
     function toggleExpenseDetails() {
@@ -428,9 +440,11 @@ export function createAnalysisController({
 
     return {
         openExpenseAnalysisModal,
+        openExpenseAnalysisModalForMonth,
         closeExpenseAnalysisModal,
         closeExpenseEditModal,
         openIncomeAnalysisModal,
+        openIncomeAnalysisModalForMonth,
         closeIncomeAnalysisModal,
         openIncomeAnalysisFromExpense,
         toggleExpenseDetails,

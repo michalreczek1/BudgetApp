@@ -13,6 +13,10 @@ const dbPath = path.join(tempRoot, 'tenant-e2e.db');
 const backupDir = path.join(tempRoot, 'backups');
 const port = 8147;
 const baseUrl = `http://127.0.0.1:${port}`;
+const now = new Date();
+const currentMonthValue = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+const previousMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+const previousMonthValue = `${previousMonthDate.getFullYear()}-${String(previousMonthDate.getMonth() + 1).padStart(2, '0')}`;
 
 mkdirSync(backupDir, { recursive: true });
 
@@ -113,6 +117,14 @@ test('tenant payments flow updates balance, analysis and monthly state', async (
     await expect(page.locator('#monthToDateCollapsedIncome')).toContainText('1 800');
     await expect(page.locator('#monthToDateCollapsedExpense')).toContainText('0,00');
     await expect(page.locator('#monthToDateCollapsedBalance')).toContainText('1 800');
+    await page.locator('#monthToDateCard .monthly-overview-summary-item').first().click();
+    await expect(page.locator('#incomeAnalysisModal')).toBeVisible();
+    await expect(page.locator('#incomeAnalysisMonth')).toHaveValue(currentMonthValue);
+    await page.locator('#incomeAnalysisModal').getByRole('button', { name: 'Zamknij' }).click();
+    await page.locator('#previousMonthCard .monthly-overview-summary-item').nth(1).click();
+    await expect(page.locator('#expenseAnalysisModal')).toBeVisible();
+    await expect(page.locator('#expenseAnalysisMonth')).toHaveValue(previousMonthValue);
+    await page.locator('#expenseAnalysisModal').getByRole('button', { name: 'Zamknij' }).click();
     await page.locator('#monthToDateToggle').click();
     await expect(page.locator('#monthToDateToggle')).toHaveAttribute('aria-expanded', 'true');
     await expect(page.locator('#monthToDateDetails')).not.toHaveClass(/hidden/);

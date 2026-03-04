@@ -449,9 +449,11 @@ const parseUserDateToISO = importedParseUserDateToISO;
 
         const {
             openExpenseAnalysisModal,
+            openExpenseAnalysisModalForMonth,
             closeExpenseAnalysisModal,
             closeExpenseEditModal,
             openIncomeAnalysisModal,
+            openIncomeAnalysisModalForMonth,
             closeIncomeAnalysisModal,
             openIncomeAnalysisFromExpense,
             toggleExpenseDetails,
@@ -509,6 +511,27 @@ const parseUserDateToISO = importedParseUserDateToISO;
             flushStateSave,
             renderIncomeAnalysis
         });
+
+        function getMonthlyOverviewMonthValue(cardId) {
+            const monthValue = document.getElementById(cardId)?.dataset?.monthValue || '';
+            return /^\d{4}-\d{2}$/.test(monthValue) ? monthValue : getMonthInputValue(new Date());
+        }
+
+        function openMonthToDateIncomeAnalysis() {
+            openIncomeAnalysisModalForMonth(getMonthlyOverviewMonthValue('monthToDateCard'));
+        }
+
+        function openMonthToDateExpenseAnalysis() {
+            openExpenseAnalysisModalForMonth(getMonthlyOverviewMonthValue('monthToDateCard'));
+        }
+
+        function openPreviousMonthIncomeAnalysis() {
+            openIncomeAnalysisModalForMonth(getMonthlyOverviewMonthValue('previousMonthCard'));
+        }
+
+        function openPreviousMonthExpenseAnalysis() {
+            openExpenseAnalysisModalForMonth(getMonthlyOverviewMonthValue('previousMonthCard'));
+        }
 
         // App initialization and login/logout
         async function initializeStorage() {
@@ -1623,6 +1646,10 @@ const parseUserDateToISO = importedParseUserDateToISO;
             goToCurrentMonth,
             toggleMonthToDateCard,
             togglePreviousMonthCard,
+            openMonthToDateIncomeAnalysis,
+            openMonthToDateExpenseAnalysis,
+            openPreviousMonthIncomeAnalysis,
+            openPreviousMonthExpenseAnalysis,
             openAdminPanel,
             closeAdminPanel,
             openExpenseAnalysisModal,

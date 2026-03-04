@@ -68,6 +68,8 @@ export function createRenderController({
         }
 
         const { currentMonth, previousMonth } = monthlyOverview;
+        monthToDateCard.dataset.monthValue = currentMonth.monthValue;
+        previousMonthCard.dataset.monthValue = previousMonth.monthValue;
 
         document.getElementById('monthToDateSubtext').textContent = 'Bieżący miesiąc do dziś';
         document.getElementById('monthToDateCollapsedIncome').textContent = formatCurrencyPLN(currentMonth.realizedIncomeToDate);
