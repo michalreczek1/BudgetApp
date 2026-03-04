@@ -100,6 +100,33 @@ const TODAY = new Date('2026-03-10T12:00:00');
     payments: [],
     incomes: [],
     incomeEntries: [
+      createEntry({ id: 1, amount: 1800, date: '2026-03-04', category: 'zaplanowane wpływy', source: 'planned-income' }),
+      createEntry({ id: 2, amount: 1800, date: '2026-03-04', category: 'pensja', source: 'balance-update' }),
+      createEntry({ id: 3, amount: 900, date: '2026-02-04', category: 'zaplanowane wpływy', source: 'planned-income' }),
+      createEntry({ id: 4, amount: 900, date: '2026-02-04', category: 'premia', source: 'balance-update' })
+    ],
+    expenseEntries: [
+      createEntry({ id: 5, amount: 1200, date: '2026-03-05', category: 'zaplanowane płatności', source: 'planned-payment' }),
+      createEntry({ id: 6, amount: 1200, date: '2026-03-05', category: 'jedzenie', source: 'balance-update' }),
+      createEntry({ id: 7, amount: 300, date: '2026-02-05', category: 'zaplanowane płatności', source: 'planned-payment' }),
+      createEntry({ id: 8, amount: 300, date: '2026-02-05', category: 'rachunki', source: 'balance-update' })
+    ]
+  });
+
+  assert.equal(result.currentMonth.realizedIncomeToDate, 1800);
+  assert.equal(result.currentMonth.realizedExpenseToDate, 1200);
+  assert.equal(result.currentMonth.balanceToDate, 600);
+  assert.equal(result.previousMonth.realizedIncome, 900);
+  assert.equal(result.previousMonth.realizedExpense, 300);
+  assert.equal(result.previousMonth.balance, 600);
+}
+
+{
+  const result = calculateDashboardMonthSummary({
+    today: TODAY,
+    payments: [],
+    incomes: [],
+    incomeEntries: [
       createEntry({ id: 1, amount: 900, date: '2026-02-03', category: 'premia' }),
       createEntry({ id: 2, amount: 300, date: '2026-03-01', category: 'premia' })
     ],

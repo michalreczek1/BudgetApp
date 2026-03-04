@@ -6,6 +6,11 @@ import {
     getPaymentOccurrenceForMonth
 } from './scheduling.js';
 
+const LEGACY_SUMMARY_CATEGORIES = new Set([
+    'zaplanowane płatności',
+    'zaplanowane wpływy'
+]);
+
 function getMonthStart(dateValue) {
     return normalizeDate(new Date(dateValue.getFullYear(), dateValue.getMonth(), 1));
 }
@@ -26,6 +31,10 @@ function sumEntriesInRange(entries, startDate, endDate) {
     const safeEntries = Array.isArray(entries) ? entries : [];
     return roundCurrency(safeEntries.reduce((sum, entry) => {
         if (!isDateInRange(entry?.date, startDate, endDate)) {
+            return sum;
+        }
+        const normalizedCategory = String(entry?.category || '').trim().toLowerCase();
+        if (LEGACY_SUMMARY_CATEGORIES.has(normalizedCategory)) {
             return sum;
         }
         return sum + (Number(entry?.amount) || 0);
