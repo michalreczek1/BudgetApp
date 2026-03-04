@@ -83,6 +83,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
             { value: 'inne', label: '✨ Inne', icon: '✨' }
         ];
         const INCOME_CATEGORY_OPTIONS = [
+            { value: 'wynagrodzenie', label: '💼 Wynagrodzenie', icon: '💼' },
             { value: 'premia', label: '🎁 Premia', icon: '🎁' },
             { value: 'rodzice', label: '👨‍👩‍👧 Rodzice', icon: '👨‍👩‍👧' },
             { value: 'najem', label: '🏠 Najem', icon: '🏠' },
@@ -1032,6 +1033,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
                 'inne': '✨'
             };
             const incomeIcons = {
+                'wynagrodzenie': '💼',
                 'premia': '🎁',
                 'rodzice': '👨‍👩‍👧',
                 'najem': '🏠',

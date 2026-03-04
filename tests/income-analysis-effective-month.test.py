@@ -10,6 +10,18 @@ import server
 
 def build_state():
     payload = deepcopy(server.DEFAULT_STATE)
+    payload["incomes"] = [
+        {
+            "id": 10,
+            "name": "Pensja",
+            "amount": 11096.0,
+            "date": "2026-02-28",
+            "frequency": "monthly",
+            "type": "income",
+            "receivedDates": ["2026-02-28"],
+            "category": "wynagrodzenie",
+        }
+    ]
     payload["incomeEntries"] = [
         {
             "id": 1,
@@ -31,6 +43,15 @@ def build_state():
         },
         {
             "id": 3,
+            "amount": 11096.0,
+            "category": "zaplanowane wpływy",
+            "date": "2026-02-27",
+            "source": "planned-income",
+            "name": "✨ Inne",
+            "icon": "📅",
+        },
+        {
+            "id": 4,
             "amount": 1200.0,
             "category": "premia",
             "date": "2026-03-28",
@@ -65,8 +86,9 @@ def test_income_analysis_uses_effective_month_for_salary_entries():
             assert february["totalAmount"] == 300.0
 
             assert "Pensja luty" in march_names
+            assert "Pensja" in march_names
             assert "Wynagrodzenie marzec" not in march_names
-            assert march["totalAmount"] == 5000.0
+            assert march["totalAmount"] == 16096.0
 
             assert "Wynagrodzenie marzec" in april_names
             assert april["totalAmount"] == 1200.0

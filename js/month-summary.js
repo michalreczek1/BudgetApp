@@ -1,6 +1,6 @@
 import { parseDateString, formatDateString } from '../date-utils.js';
 import { roundCurrency } from './formatters.js';
-import { isIncomeInEffectiveMonth } from './income-effective-month.js';
+import { isIncomeInEffectiveMonth, isSalaryLikeIncomeEntry } from './income-effective-month.js';
 import {
     normalizeDate,
     getIncomeOccurrenceForMonth,
@@ -44,10 +44,10 @@ function sumEntriesInRange(entries, startDate, endDate) {
     }, 0));
 }
 
-function sumRealizedIncomeForEffectiveMonth(entries, targetMonthValue, todayDate = null) {
+function sumRealizedIncomeForEffectiveMonth(entries, targetMonthValue, todayDate = null, plannedIncomes = []) {
     const safeEntries = Array.isArray(entries) ? entries : [];
     return roundCurrency(safeEntries.reduce((sum, entry) => {
-        if (!isIncomeInEffectiveMonth(entry, targetMonthValue)) {
+        if (!isIncomeInEffectiveMonth(entry, targetMonthValue, plannedIncomes)) {
             return sum;
         }
 
@@ -60,7 +60,7 @@ function sumRealizedIncomeForEffectiveMonth(entries, targetMonthValue, todayDate
         }
 
         const normalizedCategory = String(entry?.category || '').trim().toLowerCase();
-        if (LEGACY_SUMMARY_CATEGORIES.has(normalizedCategory)) {
+        if (LEGACY_SUMMARY_CATEGORIES.has(normalizedCategory) && !isSalaryLikeIncomeEntry(entry, plannedIncomes)) {
             return sum;
         }
 
@@ -127,7 +127,7 @@ export function calculateDashboardMonthSummary({
     const previousMonthEnd = getMonthEnd(previousMonthDate);
     const previousMonthValue = formatDateString(previousMonthStart).slice(0, 7);
 
-    const realizedIncomeToDate = sumRealizedIncomeForEffectiveMonth(incomeEntries, currentMonthValue, normalizedToday);
+    const realizedIncomeToDate = sumRealizedIncomeForEffectiveMonth(incomeEntries, currentMonthValue, normalizedToday, incomes);
     const realizedExpenseToDate = sumEntriesInRange(expenseEntries, currentMonthStart, normalizedToday);
     const plannedIncomeToDate = sumPlannedOccurrencesInRange(
         incomes,
@@ -158,7 +158,7 @@ export function calculateDashboardMonthSummary({
     const projectedIncome = roundCurrency(realizedIncomeToDate + plannedIncomeOutstanding);
     const projectedExpense = roundCurrency(realizedExpenseToDate + plannedExpenseOutstanding);
 
-    const previousMonthRealizedIncome = sumRealizedIncomeForEffectiveMonth(incomeEntries, previousMonthValue);
+    const previousMonthRealizedIncome = sumRealizedIncomeForEffectiveMonth(incomeEntries, previousMonthValue, null, incomes);
     const previousMonthRealizedExpense = sumEntriesInRange(expenseEntries, previousMonthStart, previousMonthEnd);
 
     return {

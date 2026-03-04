@@ -553,12 +553,106 @@ def get_category_icon(entry_type, category):
         "premia": "🎁",
         "rodzice": "👨‍👩‍👧",
         "najem": "🏠",
+        "wynagrodzenie": "💼",
         "inne": "✨",
     }
 
     if entry_type == "income":
         return income_icons.get(normalized, "💵")
     return expense_icons.get(normalized, "🧾")
+
+
+def is_employer_income_category(category):
+    return sanitize_text(category, allow_empty=False, default="").lower() == "wynagrodzenie"
+
+
+def is_salary_like_income_definition(item):
+    if not isinstance(item, dict):
+        return False
+
+    if is_employer_income_category(item.get("category", "")):
+        return True
+
+    normalized_name = sanitize_text(item.get("name", ""), allow_empty=False, default="").lower()
+    return any(keyword in normalized_name for keyword in SALARY_INCOME_KEYWORDS)
+
+
+def get_rounded_amount(value):
+    try:
+        return round(abs(float(value or 0)), 2)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def find_closest_received_date(entry_date, received_dates):
+    parsed_entry_date = parse_iso_date(entry_date)
+    if parsed_entry_date is None:
+        return None
+
+    closest_date = None
+    closest_distance = None
+    for received_date in normalize_date_list(received_dates or []):
+        parsed_received_date = parse_iso_date(received_date)
+        if parsed_received_date is None:
+            continue
+
+        distance = abs((parsed_received_date - parsed_entry_date).days)
+        if closest_distance is None or distance < closest_distance:
+            closest_date = received_date
+            closest_distance = distance
+
+    return closest_date
+
+
+def find_matching_salary_income_plan(entry, income_plans):
+    if sanitize_text(entry.get("source", ""), allow_empty=False, default="").lower() != "planned-income":
+        return None
+
+    entry_amount = get_rounded_amount(entry.get("amount", 0))
+    candidates = []
+    for income_plan in income_plans or []:
+        if get_rounded_amount(income_plan.get("amount", 0)) != entry_amount:
+            continue
+        if not is_salary_like_income_definition(income_plan):
+            continue
+
+        matched_received_date = find_closest_received_date(
+            entry.get("date", ""),
+            income_plan.get("receivedDates", []),
+        )
+        if not matched_received_date:
+            continue
+
+        candidates.append((income_plan, matched_received_date))
+
+    if not candidates:
+        return None
+
+    entry_date = parse_iso_date(entry.get("date", ""))
+    if entry_date is None:
+        return candidates[0]
+
+    candidates.sort(
+        key=lambda candidate: abs((parse_iso_date(candidate[1]) - entry_date).days)
+    )
+    return candidates[0]
+
+
+def get_income_effective_month_value_for_entry(entry, income_plans=None):
+    entry_date = str(entry.get("date") or "").strip()
+    matched_plan = find_matching_salary_income_plan(entry, income_plans or [])
+    effective_date = matched_plan[1] if matched_plan else entry_date
+    parsed_date = parse_iso_date(effective_date)
+    if parsed_date is None:
+        return ""
+
+    is_salary_like = is_salary_like_income_definition(entry) or bool(matched_plan)
+    if is_salary_like and parsed_date.day >= LATE_MONTH_DAY_THRESHOLD:
+        if parsed_date.month == 12:
+            return f"{parsed_date.year + 1:04d}-01"
+        return f"{parsed_date.year:04d}-{parsed_date.month + 1:02d}"
+
+    return f"{parsed_date.year:04d}-{parsed_date.month:02d}"
 
 
 def add_validation_error(errors, field, message):
@@ -1969,6 +2063,7 @@ def read_transactions_for_month(entry_type, month_value):
         raise ValueError("Invalid transaction type")
     start_date, end_date = parse_month_range(month_value)
     query_start_date = start_date
+    income_plans = []
     if entry_type == "income":
         target_month_start = parse_iso_date(start_date)
         previous_month_start = date(target_month_start.year, target_month_start.month, 1)
@@ -1981,6 +2076,15 @@ def read_transactions_for_month(entry_type, month_value):
     with DB_LOCK:
         conn = sqlite3.connect(DB_PATH)
         try:
+            if entry_type == "income":
+                income_state_row = conn.execute(
+                    "SELECT incomes FROM app_state WHERE id = 1"
+                ).fetchone()
+                if income_state_row:
+                    income_plans = [
+                        sanitize_income(item)
+                        for item in parse_json_column(income_state_row[0], [])
+                    ]
             rows = conn.execute(
                 """
                 SELECT entry_key, amount, category, entry_date, source, name, icon
@@ -2020,9 +2124,16 @@ def read_transactions_for_month(entry_type, month_value):
             "icon": str(row[6] or ""),
         }
         if entry_type == "income":
-            effective_month_value = get_income_effective_month_value(entry["date"], entry["name"])
+            matched_salary_plan = find_matching_salary_income_plan(entry, income_plans)
+            if matched_salary_plan:
+                matched_income, _ = matched_salary_plan
+                entry["name"] = str(matched_income.get("name") or entry["name"])
+                entry["category"] = str(matched_income.get("category") or entry["category"])
+                entry["icon"] = get_category_icon("income", entry["category"])
+            effective_month_value = get_income_effective_month_value_for_entry(entry, income_plans)
             if effective_month_value != month_value:
                 continue
+            category = str(entry["category"] or "inne")
         entries.append(entry)
         totals_by_category[category] = round(totals_by_category.get(category, 0.0) + amount, 2)
         total_amount = round(total_amount + amount, 2)
