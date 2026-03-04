@@ -237,6 +237,21 @@ const TODAY = new Date('2026-03-10T12:00:00');
     payments: [],
     incomes: [],
     incomeEntries: [
+      createEntry({ id: 40, amount: 3000, date: '2026-03-03', category: 'zaplanowane wpływy', source: 'planned-income', name: '✨ Inne' }),
+      createEntry({ id: 41, amount: 3000, date: '2026-03-03', category: 'najem', source: 'tenant-payment', name: 'Kościelna' })
+    ],
+    expenseEntries: []
+  });
+
+  assert.equal(result.currentMonth.realizedIncomeToDate, 6000);
+}
+
+{
+  const result = calculateDashboardMonthSummary({
+    today: TODAY,
+    payments: [],
+    incomes: [],
+    incomeEntries: [
       createEntry({ id: 1, amount: 2500, date: '2026-03-01', category: 'premia' }),
       createEntry({ id: 2, amount: 800, date: '2026-03-10', category: 'najem' }),
       createEntry({ id: 3, amount: 400, date: '2026-03-18', category: 'inne' })
@@ -257,7 +272,9 @@ const TODAY = new Date('2026-03-10T12:00:00');
   const result = calculateDashboardMonthSummary({
     today: TODAY,
     payments: [],
-    incomes: [],
+    incomes: [
+      createIncome({ id: 50, amount: 1800, date: '2026-03-04', frequency: 'monthly', category: 'wynagrodzenie', name: 'Pensja', receivedDates: ['2026-03-04'] })
+    ],
     incomeEntries: [
       createEntry({ id: 1, amount: 1800, date: '2026-03-04', category: 'zaplanowane wpływy', source: 'planned-income' }),
       createEntry({ id: 2, amount: 1800, date: '2026-03-04', category: 'pensja', source: 'balance-update' }),

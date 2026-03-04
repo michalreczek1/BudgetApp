@@ -1,6 +1,6 @@
 import { parseDateString, formatDateString } from '../date-utils.js';
 import { roundCurrency } from './formatters.js';
-import { isIncomeInEffectiveMonth, isSalaryLikeIncomeEntry } from './income-effective-month.js';
+import { isIncomeInEffectiveMonth } from './income-effective-month.js';
 import {
     normalizeDate,
     getIncomeOccurrenceForMonth,
@@ -15,6 +15,10 @@ const LEGACY_SUMMARY_CATEGORIES = new Set([
 ]);
 
 function normalizeCategory(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function normalizeSource(value) {
     return String(value || '').trim().toLowerCase();
 }
 
@@ -104,6 +108,7 @@ function sumRealizedIncomeForEffectiveMonth(entries, targetMonthValue, todayDate
                 entry,
                 candidate => (
                     isIncomeInEffectiveMonth(candidate, targetMonthValue, plannedIncomes) &&
+                    normalizeSource(candidate?.source) === 'balance-update' &&
                     (!todayDate || !Number.isNaN(parseDateString(candidate?.date).getTime()) && parseDateString(candidate?.date) <= todayDate)
                 )
             )
