@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 import argparse
+import csv
 import hashlib
 import hmac
+import io
 import json
 import math
 import mimetypes
@@ -80,6 +82,7 @@ PIN_SCRYPT_PARAMS = {
 BACKUP_INTERVAL_SECONDS = env_int("BACKUP_INTERVAL_SECONDS", 24 * 60 * 60, 300)
 BACKUP_RETENTION_COUNT = env_int("BACKUP_RETENTION_COUNT", 14, 1)
 MAX_BACKUP_UPLOAD_BYTES = env_int("MAX_BACKUP_UPLOAD_BYTES", 25 * 1024 * 1024, 1024 * 1024)
+MAX_BANK_IMPORT_BYTES = env_int("MAX_BANK_IMPORT_BYTES", 2 * 1024 * 1024, 64 * 1024)
 STATIC_FILE_WHITELIST = {
     "/": "budget-app.html",
     "/budget-app.html": "budget-app.html",
@@ -101,6 +104,7 @@ STATIC_FILE_WHITELIST = {
     "/js/month-summary.js": "js/month-summary.js",
     "/js/tenants.js": "js/tenants.js",
     "/js/tenant-payments.js": "js/tenant-payments.js",
+    "/js/rentals.js": "js/rentals.js",
     "/js/state.js": "js/state.js",
     "/service-worker.js": "service-worker.js",
     "/manifest.webmanifest": "manifest.webmanifest",
@@ -972,7 +976,26 @@ def is_mount_point(path_value):
 
 
 def running_on_railway():
-    return bool(str(os.getenv("RAILWAY_PROJECT_ID", "")).strip())
+    railway_env_keys = (
+        "RAILWAY_PROJECT_ID",
+        "RAILWAY_ENVIRONMENT",
+        "RAILWAY_SERVICE_ID",
+        "RAILWAY_DEPLOYMENT_ID",
+    )
+    return any(str(os.getenv(key, "")).strip() for key in railway_env_keys)
+
+
+def railway_deploy_allowed():
+    return env_flag("ALLOW_RAILWAY_DEPLOY", False)
+
+
+def enforce_deployment_target():
+    if running_on_railway() and not railway_deploy_allowed():
+        raise RuntimeError(
+            "Railway deployment is disabled. "
+            "This Budget App instance is Proxmox-only. "
+            "Run it on the Proxmox host/VM, or set ALLOW_RAILWAY_DEPLOY=1 only for an intentional emergency override."
+        )
 
 
 def get_required_persistent_mount():
@@ -1021,6 +1044,7 @@ def get_storage_status():
 
     return {
         "railway": running_on_railway(),
+        "railwayDeployAllowed": railway_deploy_allowed(),
         "guardEnabled": guard_on,
         "allowEphemeralDb": env_flag("ALLOW_EPHEMERAL_DB", False),
         "dbPath": str(resolved_db),
@@ -2147,6 +2171,334 @@ def read_transactions_for_month(entry_type, month_value):
     }
 
 
+def is_month_value(raw_value):
+    return isinstance(raw_value, str) and re.fullmatch(r"\d{4}-\d{2}", raw_value.strip()) is not None
+
+
+def normalize_month_value(raw_value):
+    if is_month_value(raw_value):
+        return str(raw_value).strip()
+    today = app_now().date()
+    return f"{today.year}-{str(today.month).zfill(2)}"
+
+
+def normalize_year_value(raw_value):
+    try:
+        year = int(str(raw_value or "").strip())
+    except (TypeError, ValueError):
+        year = app_now().year
+    if year < 2000 or year > 2100:
+        year = app_now().year
+    return year
+
+
+def get_tenant_due_date_for_month(month_value, due_day):
+    return f"{month_value}-{str(sanitize_tenant_due_day(due_day)).zfill(2)}"
+
+
+def find_tenant_history_record(history, tenant_id, month_value):
+    for record in history:
+        if int(record.get("tenantId", 0)) == int(tenant_id) and str(record.get("month", "")) == month_value:
+            return record
+    return None
+
+
+def build_rental_payment_status(profile, history_record, month_value, today_value):
+    if not profile.get("isActive"):
+        return "inactive"
+    if history_record and history_record.get("paid"):
+        expected_amount = round_currency(history_record.get("amount", profile.get("amount", 0)))
+        paid_amount = expected_amount
+        if paid_amount > expected_amount:
+            return "overpaid"
+        return "paid"
+
+    due_date = parse_iso_date(
+        str(history_record.get("dueDate", "")) if history_record else get_tenant_due_date_for_month(month_value, profile.get("dueDay"))
+    )
+    if due_date and due_date < today_value:
+        return "late"
+    return "unpaid"
+
+
+def build_rental_month_rows(state, month_value, today_value=None):
+    clean_state = sanitize_state(state)
+    profiles = sanitize_tenant_profiles(clean_state.get("tenantProfiles", []))
+    history = sanitize_tenant_payment_history(clean_state.get("tenantPaymentHistory", []))
+    today = today_value or app_now().date()
+    rows = []
+
+    for profile in profiles:
+        if not profile.get("isActive"):
+            continue
+        history_record = find_tenant_history_record(history, profile["id"], month_value)
+        expected_total = round_currency(history_record.get("amount", profile.get("amount", 0))) if history_record else round_currency(profile.get("amount", 0))
+        paid_amount = expected_total if history_record and history_record.get("paid") else 0.0
+        rent_amount = expected_total
+        utilities_advance = 0.0
+        other_charges = 0.0
+        taxable_amount = rent_amount
+        tax_amount = round_currency(taxable_amount * 0.085)
+        management_marek_amount = 0.0
+        owner_income_amount = round_currency(expected_total - tax_amount - management_marek_amount)
+        utilities_paid_amount = 0.0
+        utilities_balance_amount = round_currency(utilities_advance - utilities_paid_amount)
+
+        rows.append(
+            {
+                "tenantId": profile["id"],
+                "tenantName": profile.get("name", ""),
+                "month": month_value,
+                "dueDate": history_record.get("dueDate") if history_record else get_tenant_due_date_for_month(month_value, profile.get("dueDay")),
+                "expectedTotal": expected_total,
+                "paidAmount": paid_amount,
+                "paidAt": history_record.get("paidAt", "") if history_record else "",
+                "paymentStatus": build_rental_payment_status(profile, history_record, month_value, today),
+                "rentAmount": rent_amount,
+                "utilitiesAdvance": utilities_advance,
+                "otherCharges": other_charges,
+                "taxableAmount": taxable_amount,
+                "taxAmount": tax_amount,
+                "managementMarekAmount": management_marek_amount,
+                "ownerIncomeAmount": owner_income_amount,
+                "utilitiesPaidAmount": utilities_paid_amount,
+                "utilitiesBalanceAmount": utilities_balance_amount,
+                "notes": "",
+            }
+        )
+
+    return rows
+
+
+def summarize_rental_month(rows):
+    summary = {
+        "activeTenants": 0,
+        "paidTenants": 0,
+        "lateTenants": 0,
+        "expectedTotal": 0.0,
+        "paidTotal": 0.0,
+        "rentTaxableTotal": 0.0,
+        "utilitiesAdvanceTotal": 0.0,
+        "utilitiesPaidTotal": 0.0,
+        "utilitiesBalanceTotal": 0.0,
+        "otherChargesTotal": 0.0,
+        "managementMarekTotal": 0.0,
+        "ownerIncomeTotal": 0.0,
+        "taxTotal": 0.0,
+        "arrearsTotal": 0.0,
+    }
+
+    for row in rows:
+        summary["activeTenants"] += 1
+        if row.get("paymentStatus") == "paid":
+            summary["paidTenants"] += 1
+        if row.get("paymentStatus") == "late":
+            summary["lateTenants"] += 1
+        summary["expectedTotal"] = round_currency(summary["expectedTotal"] + row.get("expectedTotal", 0))
+        summary["paidTotal"] = round_currency(summary["paidTotal"] + row.get("paidAmount", 0))
+        summary["rentTaxableTotal"] = round_currency(summary["rentTaxableTotal"] + row.get("rentAmount", 0))
+        summary["utilitiesAdvanceTotal"] = round_currency(summary["utilitiesAdvanceTotal"] + row.get("utilitiesAdvance", 0))
+        summary["utilitiesPaidTotal"] = round_currency(summary["utilitiesPaidTotal"] + row.get("utilitiesPaidAmount", 0))
+        summary["utilitiesBalanceTotal"] = round_currency(summary["utilitiesBalanceTotal"] + row.get("utilitiesBalanceAmount", 0))
+        summary["otherChargesTotal"] = round_currency(summary["otherChargesTotal"] + row.get("otherCharges", 0))
+        summary["managementMarekTotal"] = round_currency(summary["managementMarekTotal"] + row.get("managementMarekAmount", 0))
+        summary["ownerIncomeTotal"] = round_currency(summary["ownerIncomeTotal"] + row.get("ownerIncomeAmount", 0))
+        summary["taxTotal"] = round_currency(summary["taxTotal"] + row.get("taxAmount", 0))
+        summary["arrearsTotal"] = round_currency(summary["arrearsTotal"] + max(0, row.get("expectedTotal", 0) - row.get("paidAmount", 0)))
+
+    return summary
+
+
+def calculate_rental_year_tax(taxable_income, married_limit=False):
+    first_threshold = 200000.0 if married_limit else 100000.0
+    first_bucket = min(max(0.0, taxable_income), first_threshold)
+    second_bucket = max(0.0, taxable_income - first_threshold)
+    return {
+        "taxableIncome": round_currency(taxable_income),
+        "firstThreshold": round_currency(first_threshold),
+        "firstRate": 0.085,
+        "secondRate": 0.125,
+        "firstBucket": round_currency(first_bucket),
+        "secondBucket": round_currency(second_bucket),
+        "tax": round_currency(first_bucket * 0.085 + second_bucket * 0.125),
+    }
+
+
+def build_rental_overview(month_value, year_value):
+    state = read_state()
+    normalized_month = normalize_month_value(month_value)
+    normalized_year = normalize_year_value(year_value)
+    month_rows = build_rental_month_rows(state, normalized_month)
+    month_summary = summarize_rental_month(month_rows)
+    year_months = []
+    year_taxable_total = 0.0
+
+    for month_number in range(1, 13):
+        loop_month = f"{normalized_year}-{str(month_number).zfill(2)}"
+        rows = build_rental_month_rows(state, loop_month)
+        summary = summarize_rental_month(rows)
+        year_taxable_total = round_currency(year_taxable_total + summary["rentTaxableTotal"] + summary["otherChargesTotal"])
+        tax_ytd = calculate_rental_year_tax(year_taxable_total)
+        year_months.append(
+            {
+                "month": loop_month,
+                "rows": rows,
+                "summary": {
+                    **summary,
+                    "taxYearToDate": tax_ytd["tax"],
+                    "taxableYearToDate": tax_ytd["taxableIncome"],
+                },
+            }
+        )
+
+    return {
+        "month": normalized_month,
+        "year": normalized_year,
+        "labels": {
+            "managementMarek": "Zarządzanie Marek",
+            "ownerIncome": "Mój przychód",
+        },
+        "monthRows": month_rows,
+        "monthSummary": month_summary,
+        "yearMonths": year_months,
+        "yearTax": calculate_rental_year_tax(year_taxable_total),
+        "source": "tenantProfiles",
+    }
+
+
+def normalize_bank_column_name(name):
+    return re.sub(r"[^a-z0-9]+", "", str(name or "").strip().lower())
+
+
+def pick_bank_field(row, candidates):
+    normalized = {normalize_bank_column_name(key): value for key, value in row.items()}
+    for candidate in candidates:
+        key = normalize_bank_column_name(candidate)
+        if key in normalized:
+            return str(normalized[key] or "").strip()
+    return ""
+
+
+def parse_bank_amount(raw_value):
+    text = str(raw_value or "").strip().replace(" ", "").replace("\xa0", "")
+    text = text.replace("PLN", "").replace("zl", "").replace("zł", "")
+    if "," in text and "." in text:
+        text = text.replace(".", "").replace(",", ".")
+    else:
+        text = text.replace(",", ".")
+    return round_currency(text)
+
+
+def parse_bank_statement_csv(raw_content):
+    content = str(raw_content or "")
+    if not content.strip():
+        return []
+
+    sample = content[:2048]
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
+    except csv.Error:
+        dialect = csv.excel
+        dialect.delimiter = ";"
+
+    rows = []
+    reader = csv.DictReader(io.StringIO(content), dialect=dialect)
+    if reader.fieldnames:
+        for index, row in enumerate(reader, start=1):
+            transaction_date = pick_bank_field(row, ["data", "date", "data operacji", "data transakcji", "booking date"])
+            amount = parse_bank_amount(pick_bank_field(row, ["kwota", "amount", "wartosc", "value"]))
+            title = pick_bank_field(row, ["tytul", "tytuł", "opis", "description", "nazwa", "details"])
+            contractor = pick_bank_field(row, ["kontrahent", "nadawca", "odbiorca", "name", "counterparty"])
+            if amount == 0 and not title and not contractor:
+                continue
+            rows.append(
+                {
+                    "sourceRow": index,
+                    "date": transaction_date,
+                    "amount": amount,
+                    "title": title,
+                    "contractor": contractor,
+                }
+            )
+    return rows
+
+
+def build_bank_import_suggestions(transactions):
+    state = read_state()
+    profiles = [profile for profile in sanitize_tenant_profiles(state.get("tenantProfiles", [])) if profile.get("isActive")]
+    suggestions = []
+
+    for transaction in transactions:
+        text = f"{transaction.get('title', '')} {transaction.get('contractor', '')}".lower()
+        amount = round_currency(transaction.get("amount", 0))
+        best_match = None
+        best_score = 0.0
+        best_reason = "Brak pewnego dopasowania"
+
+        for profile in profiles:
+            name = str(profile.get("name", "")).strip()
+            expected_amount = round_currency(profile.get("amount", 0))
+            score = 0.0
+            reasons = []
+            if name and name.lower() in text:
+                score += 0.55
+                reasons.append("opis zawiera nazwę najemcy")
+            if expected_amount > 0 and abs(abs(amount) - expected_amount) <= 5:
+                score += 0.35
+                reasons.append("kwota pasuje do oczekiwanego przelewu")
+            if amount > 0:
+                score += 0.10
+                reasons.append("transakcja jest wpływem")
+            if score > best_score:
+                best_score = score
+                best_match = profile
+                best_reason = ", ".join(reasons) if reasons else best_reason
+
+        suggestions.append(
+            {
+                "transaction": transaction,
+                "tenantId": best_match.get("id") if best_match else None,
+                "tenantName": best_match.get("name") if best_match else "",
+                "confidence": round(best_score, 2),
+                "requiresReview": best_score < 0.75,
+                "reason": best_reason,
+                "llmEligible": best_score < 0.75,
+            }
+        )
+
+    return suggestions
+
+
+def preview_bank_statement_import(payload):
+    file_name = sanitize_text(payload.get("fileName", ""), max_length=180, default="wyciag.csv")
+    content = str(payload.get("content", ""))
+    raw_bytes = content.encode("utf-8", errors="ignore")
+    if len(raw_bytes) > MAX_BANK_IMPORT_BYTES:
+        raise ValueError("bank_import_too_large")
+
+    suffix = Path(file_name).suffix.lower()
+    if suffix not in {".csv", ".txt", ".xlsx", ".pdf"}:
+        raise ValueError("unsupported_bank_import_format")
+
+    warnings = []
+    transactions = []
+    if suffix in {".csv", ".txt"}:
+        transactions = parse_bank_statement_csv(content)
+    else:
+        warnings.append("Parser XLSX/PDF jest przygotowany jako bezpieczny punkt wejścia; pełna ekstrakcja będzie kolejnym etapem.")
+
+    suggestions = build_bank_import_suggestions(transactions)
+    return {
+        "ok": True,
+        "fileName": file_name,
+        "format": suffix.lstrip("."),
+        "transactionCount": len(transactions),
+        "suggestions": suggestions,
+        "warnings": warnings,
+        "llmMode": "Grok/LLM tylko pomocniczo dla sugestii oznaczonych jako requiresReview.",
+    }
+
+
 def get_backup_dir():
     raw_backup_dir = str(os.getenv("BACKUP_DIR", "")).strip()
     if raw_backup_dir:
@@ -2472,6 +2824,149 @@ def init_db():
             )
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS rental_properties (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    address TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS rental_units (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    property_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (property_id) REFERENCES rental_properties(id)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS rental_tenants (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    display_name TEXT NOT NULL,
+                    aliases_json TEXT NOT NULL DEFAULT '[]',
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS rental_leases (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tenant_id INTEGER NOT NULL,
+                    unit_id INTEGER NULL,
+                    start_date TEXT NOT NULL DEFAULT '',
+                    end_date TEXT NOT NULL DEFAULT '',
+                    due_day INTEGER NOT NULL DEFAULT 10,
+                    expected_total REAL NOT NULL DEFAULT 0,
+                    rent_amount REAL NOT NULL DEFAULT 0,
+                    utilities_advance REAL NOT NULL DEFAULT 0,
+                    other_charges REAL NOT NULL DEFAULT 0,
+                    taxable_other_charges INTEGER NOT NULL DEFAULT 0,
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    notes TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (tenant_id) REFERENCES rental_tenants(id),
+                    FOREIGN KEY (unit_id) REFERENCES rental_units(id)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS rental_monthly_charges (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tenant_id INTEGER NOT NULL,
+                    lease_id INTEGER NULL,
+                    month TEXT NOT NULL,
+                    due_date TEXT NOT NULL,
+                    expected_total REAL NOT NULL DEFAULT 0,
+                    rent_amount REAL NOT NULL DEFAULT 0,
+                    utilities_advance REAL NOT NULL DEFAULT 0,
+                    other_charges REAL NOT NULL DEFAULT 0,
+                    paid_amount REAL NOT NULL DEFAULT 0,
+                    paid_at TEXT NOT NULL DEFAULT '',
+                    payment_status TEXT NOT NULL DEFAULT 'unpaid',
+                    taxable_amount REAL NOT NULL DEFAULT 0,
+                    tax_amount REAL NOT NULL DEFAULT 0,
+                    management_marek_amount REAL NOT NULL DEFAULT 0,
+                    owner_income_amount REAL NOT NULL DEFAULT 0,
+                    utilities_paid_amount REAL NOT NULL DEFAULT 0,
+                    utilities_balance_amount REAL NOT NULL DEFAULT 0,
+                    notes TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (tenant_id, month)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS rental_bank_imports (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    file_name TEXT NOT NULL,
+                    file_hash TEXT NOT NULL,
+                    import_status TEXT NOT NULL DEFAULT 'preview',
+                    warnings_json TEXT NOT NULL DEFAULT '[]',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS rental_bank_transactions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    import_id INTEGER NOT NULL,
+                    transaction_hash TEXT NOT NULL,
+                    transaction_date TEXT NOT NULL DEFAULT '',
+                    amount REAL NOT NULL DEFAULT 0,
+                    title TEXT NOT NULL DEFAULT '',
+                    contractor TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE (transaction_hash),
+                    FOREIGN KEY (import_id) REFERENCES rental_bank_imports(id)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS rental_match_suggestions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    bank_transaction_id INTEGER NULL,
+                    tenant_id INTEGER NULL,
+                    suggested_month TEXT NOT NULL DEFAULT '',
+                    confidence REAL NOT NULL DEFAULT 0,
+                    reason TEXT NOT NULL DEFAULT '',
+                    source TEXT NOT NULL DEFAULT 'rules',
+                    decision TEXT NOT NULL DEFAULT 'pending',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (bank_transaction_id) REFERENCES rental_bank_transactions(id)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS rental_audit_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_type TEXT NOT NULL,
+                    entity_type TEXT NOT NULL DEFAULT '',
+                    entity_id TEXT NOT NULL DEFAULT '',
+                    details_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            conn.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_transactions_type_date
                 ON transactions (entry_type, entry_date)
                 """
@@ -2486,6 +2981,18 @@ def init_db():
                 """
                 CREATE INDEX IF NOT EXISTS idx_ledger_events_type_date
                 ON ledger_events (event_type, effective_date)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_rental_monthly_charges_month
+                ON rental_monthly_charges (month)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_rental_bank_transactions_import
+                ON rental_bank_transactions (import_id)
                 """
             )
 
@@ -2936,6 +3443,37 @@ class BudgetRequestHandler(SimpleHTTPRequestHandler):
 
         self._send_json(200, payload)
 
+    def _handle_rentals_overview_get(self, parsed):
+        if not self._is_authenticated():
+            self._send_json(401, {"error": "unauthorized"})
+            return
+
+        query = parse_qs(parsed.query or "")
+        month = str(query.get("month", [""])[0]).strip()
+        year = str(query.get("year", [""])[0]).strip()
+        payload = build_rental_overview(month, year)
+        self._send_json(200, payload)
+
+    def _handle_rentals_bank_import_preview(self):
+        if not self._is_authenticated():
+            self._send_json(401, {"error": "unauthorized"})
+            return
+
+        payload = self._parse_json_body()
+        if payload is None:
+            self._send_json(400, {"error": "invalid_json"})
+            return
+
+        try:
+            preview = preview_bank_statement_import(payload)
+        except ValueError as exc:
+            error_code = str(exc) or "invalid_bank_import"
+            status_code = 413 if error_code == "bank_import_too_large" else 400
+            self._send_json(status_code, {"error": error_code})
+            return
+
+        self._send_json(200, preview)
+
     def _handle_auth_status(self):
         self._send_json(200, {"authenticated": self._is_authenticated()})
 
@@ -3157,6 +3695,9 @@ class BudgetRequestHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/transactions":
             self._handle_transactions_get(parsed)
             return
+        if parsed.path == "/api/rentals/overview":
+            self._handle_rentals_overview_get(parsed)
+            return
         if parsed.path == "/api/auth/status":
             self._handle_auth_status()
             return
@@ -3179,6 +3720,9 @@ class BudgetRequestHandler(SimpleHTTPRequestHandler):
             return
         if parsed.path == "/api/auth/change-pin":
             self._handle_auth_change_pin()
+            return
+        if parsed.path == "/api/rentals/imports/bank-statement/preview":
+            self._handle_rentals_bank_import_preview()
             return
 
         self.send_error(404, "Not Found")
@@ -3210,6 +3754,7 @@ def main():
     DB_PATH = Path(args.db)
     if DB_PATH.parent and str(DB_PATH.parent) not in ("", "."):
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    enforce_deployment_target()
     enforce_storage_guard()
 
     storage_status = get_storage_status()

@@ -55,7 +55,8 @@
                 <button class="icon-btn" onclick="openAdminPanel()" title="Ustawienia">⚙️</button>
                 <button class="icon-btn" onclick="openExpenseAnalysisModal()" title="Analiza wydatków">📊</button>
                 <button class="icon-btn" onclick="openIncomeAnalysisModal()" title="Analiza wpływów">📈</button>
-                <button class="icon-btn" onclick="openTenantPaymentsModal()" title="Wpłaty najemców">🏠</button>
+                <button class="icon-btn" onclick="openRentalsPanel()" title="Najem">🏘️</button>
+                <button class="icon-btn" onclick="openRentalsPanel()" title="Najem - wpłaty i rozliczenia">🏠</button>
                 <button class="icon-btn" onclick="logout()" title="Wyloguj">🚪</button>
             </div>
         </div>
@@ -80,6 +81,48 @@
                 <div class="stat-subtext" id="afterPaymentsSubtext">Po uwzględnieniu zobowiązań</div>
             </div>
         </div>
+
+        <section class="payments-section rentals-panel" id="rentalsPanel">
+            <div class="section-header rentals-header">
+                <div>
+                    <h2>🏘️ Najem</h2>
+                    <p class="rentals-subtitle">Rozliczenia miesięczne, roczna rolka jak Excel, import banku i raporty podatkowe.</p>
+                </div>
+                <div class="rentals-filters">
+                    <label>
+                        <span>Miesiąc</span>
+                        <input type="month" id="rentalMonthInput" onchange="changeRentalMonth()">
+                    </label>
+                    <label>
+                        <span>Rok</span>
+                        <input type="number" id="rentalYearInput" min="2000" max="2100" step="1" onchange="changeRentalYear()">
+                    </label>
+                </div>
+            </div>
+
+            <div class="rentals-kpi-grid" id="rentalKpiGrid"></div>
+
+            <div class="rentals-legend">
+                <span><strong>Zarządzanie Marek</strong> zastępuje pole <strong>Marek</strong> z Excela.</span>
+                <span><strong>Mój przychód</strong> zastępuje pole <strong>Dla mnie</strong>.</span>
+            </div>
+
+            <div class="rentals-tabs" role="tablist" aria-label="Widoki modułu najmu">
+                <button type="button" class="rental-tab active" data-rental-tab="month" onclick="switchRentalView('month')">Miesiąc</button>
+                <button type="button" class="rental-tab" data-rental-tab="year" onclick="switchRentalView('year')">Rok</button>
+                <button type="button" class="rental-tab" data-rental-tab="taxes" onclick="switchRentalView('taxes')">Podatki</button>
+                <button type="button" class="rental-tab" data-rental-tab="tenants" onclick="switchRentalView('tenants')">Najemcy</button>
+                <button type="button" class="rental-tab" data-rental-tab="import" onclick="switchRentalView('import')">Import banku</button>
+                <button type="button" class="rental-tab" data-rental-tab="reports" onclick="switchRentalView('reports')">Raporty</button>
+            </div>
+
+            <div class="rental-view active" data-rental-view="month" id="rentalMonthView"></div>
+            <div class="rental-view" data-rental-view="year" id="rentalYearView"></div>
+            <div class="rental-view" data-rental-view="taxes" id="rentalTaxesView"></div>
+            <div class="rental-view" data-rental-view="tenants" id="rentalTenantsView"></div>
+            <div class="rental-view" data-rental-view="import" id="rentalImportView"></div>
+            <div class="rental-view" data-rental-view="reports" id="rentalReportsView"></div>
+        </section>
 
         <!-- Payments List -->
         <div class="payments-section">
@@ -139,7 +182,7 @@
                 <h2>🏠 Raport najemców</h2>
                 <div class="tenant-report-header-actions">
                     <span class="tenant-report-month" id="tenantDashboardMonth">-</span>
-                    <button type="button" class="btn btn-secondary tenant-open-btn" onclick="openTenantPaymentsModal()">Otwórz moduł</button>
+                    <button type="button" class="btn btn-secondary tenant-open-btn" onclick="openRentalsPanel()">Przejdź do panelu</button>
                 </div>
             </div>
             <div class="tenant-report-summary" id="tenantDashboardSummary">Brak aktywnych najemców. Otwórz moduł i uzupełnij dane lokatorów.</div>

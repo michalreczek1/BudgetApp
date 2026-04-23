@@ -21,6 +21,7 @@ import { createActionsController } from './js/actions.js';
 import { calculateAvailableCashForecast } from './js/cash-forecast.js';
 import { calculateDashboardMonthSummary } from './js/month-summary.js';
 import { createTenantPaymentsController } from './js/tenant-payments.js';
+import { createRentalsController } from './js/rentals.js';
 import {
     normalizeDate,
     isOccurrencePaid,
@@ -40,7 +41,9 @@ import {
     apiSaveState,
     apiFetchAuthStatus,
     apiRunSettlement,
-    apiFetchTransactionsForAnalysis
+    apiFetchTransactionsForAnalysis,
+    apiFetchRentalsOverview,
+    apiPreviewRentalBankImport
 } from './js/api.js';
 
 if (
@@ -513,6 +516,22 @@ const parseUserDateToISO = importedParseUserDateToISO;
             renderIncomeAnalysis
         });
 
+        const {
+            openRentalsPanel,
+            renderRentalsPanel,
+            switchRentalView,
+            changeRentalMonth,
+            changeRentalYear,
+            previewBankImport
+        } = createRentalsController({
+            apiFetchRentalsOverview,
+            apiPreviewRentalBankImport,
+            formatCurrencyPLN,
+            showToast,
+            markTenantAsPaid,
+            undoTenantPayment
+        });
+
         function getMonthlyOverviewMonthValue(cardId) {
             const monthValue = document.getElementById(cardId)?.dataset?.monthValue || '';
             return /^\d{4}-\d{2}$/.test(monthValue) ? monthValue : getMonthInputValue(new Date());
@@ -666,6 +685,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
             loadIncomes();
             updateCalculations();
             renderTenantDashboardReport();
+            renderRentalsPanel();
             if (document.getElementById('tenantPaymentsModal')?.classList.contains('active')) {
                 renderTenantPayments();
             }
@@ -1709,6 +1729,15 @@ const parseUserDateToISO = importedParseUserDateToISO;
         });
 
         exposePublicActions(window);
+        Object.assign(window, {
+            openRentalsPanel,
+            renderRentalsPanel,
+            switchRentalView,
+            changeRentalMonth,
+            changeRentalYear,
+            previewBankImport,
+            openTenantPaymentsModal: openRentalsPanel
+        });
 
         // Global keyboard shortcuts for modals and forms
         document.addEventListener('keydown', function(e) {

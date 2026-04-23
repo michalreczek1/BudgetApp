@@ -96,3 +96,39 @@ export async function apiFetchTransactionsForAnalysis(entryType, monthValue) {
 
     return response.json();
 }
+
+export async function apiFetchRentalsOverview(monthValue, yearValue) {
+    const query = new URLSearchParams({
+        month: monthValue || '',
+        year: String(yearValue || '')
+    });
+    const response = await fetch(`/api/rentals/overview?${query.toString()}`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store',
+        credentials: 'same-origin'
+    });
+
+    if (!response.ok) {
+        const details = await parseJsonSafe(response, {});
+        throw buildHttpError(`GET /api/rentals/overview failed: ${response.status}`, response.status, details);
+    }
+
+    return response.json();
+}
+
+export async function apiPreviewRentalBankImport(payload) {
+    const response = await fetch('/api/rentals/imports/bank-statement/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload || {})
+    });
+
+    const data = await parseJsonSafe(response, {});
+    if (!response.ok) {
+        throw buildHttpError(`POST /api/rentals/imports/bank-statement/preview failed: ${response.status}`, response.status, data);
+    }
+
+    return data;
+}
