@@ -2234,15 +2234,6 @@ def build_rental_month_rows(state, month_value, today_value=None):
         history_record = find_tenant_history_record(history, profile["id"], month_value)
         expected_total = round_currency(history_record.get("amount", profile.get("amount", 0))) if history_record else round_currency(profile.get("amount", 0))
         paid_amount = expected_total if history_record and history_record.get("paid") else 0.0
-        rent_amount = expected_total
-        utilities_advance = 0.0
-        other_charges = 0.0
-        taxable_amount = rent_amount
-        tax_amount = round_currency(taxable_amount * 0.085)
-        management_marek_amount = 0.0
-        owner_income_amount = round_currency(expected_total - tax_amount - management_marek_amount)
-        utilities_paid_amount = 0.0
-        utilities_balance_amount = round_currency(utilities_advance - utilities_paid_amount)
 
         rows.append(
             {
@@ -2254,20 +2245,32 @@ def build_rental_month_rows(state, month_value, today_value=None):
                 "paidAmount": paid_amount,
                 "paidAt": history_record.get("paidAt", "") if history_record else "",
                 "paymentStatus": build_rental_payment_status(profile, history_record, month_value, today),
-                "rentAmount": rent_amount,
-                "utilitiesAdvance": utilities_advance,
-                "otherCharges": other_charges,
-                "taxableAmount": taxable_amount,
-                "taxAmount": tax_amount,
-                "managementMarekAmount": management_marek_amount,
-                "ownerIncomeAmount": owner_income_amount,
-                "utilitiesPaidAmount": utilities_paid_amount,
-                "utilitiesBalanceAmount": utilities_balance_amount,
-                "notes": "",
+                "rentAmount": None,
+                "utilitiesAdvance": None,
+                "otherCharges": None,
+                "taxableAmount": None,
+                "taxAmount": None,
+                "managementMarekAmount": None,
+                "ownerIncomeAmount": None,
+                "utilitiesPaidAmount": None,
+                "utilitiesBalanceAmount": None,
+                "hasSettlementData": False,
+                "calculationStatus": "legacy_payment_only",
+                "notes": "Status wpłaty z obecnego modułu. Rozbicie czynsz/media/podatek wymaga importu Excela albo naliczeń.",
             }
         )
 
     return rows
+
+
+def rental_amount(value):
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(parsed):
+        return 0.0
+    return parsed
 
 
 def summarize_rental_month(rows):
@@ -2286,25 +2289,29 @@ def summarize_rental_month(rows):
         "ownerIncomeTotal": 0.0,
         "taxTotal": 0.0,
         "arrearsTotal": 0.0,
+        "hasSettlementData": False,
     }
 
     for row in rows:
         summary["activeTenants"] += 1
+        summary["hasSettlementData"] = summary["hasSettlementData"] or bool(row.get("hasSettlementData"))
         if row.get("paymentStatus") == "paid":
             summary["paidTenants"] += 1
         if row.get("paymentStatus") == "late":
             summary["lateTenants"] += 1
-        summary["expectedTotal"] = round_currency(summary["expectedTotal"] + row.get("expectedTotal", 0))
-        summary["paidTotal"] = round_currency(summary["paidTotal"] + row.get("paidAmount", 0))
-        summary["rentTaxableTotal"] = round_currency(summary["rentTaxableTotal"] + row.get("rentAmount", 0))
-        summary["utilitiesAdvanceTotal"] = round_currency(summary["utilitiesAdvanceTotal"] + row.get("utilitiesAdvance", 0))
-        summary["utilitiesPaidTotal"] = round_currency(summary["utilitiesPaidTotal"] + row.get("utilitiesPaidAmount", 0))
-        summary["utilitiesBalanceTotal"] = round_currency(summary["utilitiesBalanceTotal"] + row.get("utilitiesBalanceAmount", 0))
-        summary["otherChargesTotal"] = round_currency(summary["otherChargesTotal"] + row.get("otherCharges", 0))
-        summary["managementMarekTotal"] = round_currency(summary["managementMarekTotal"] + row.get("managementMarekAmount", 0))
-        summary["ownerIncomeTotal"] = round_currency(summary["ownerIncomeTotal"] + row.get("ownerIncomeAmount", 0))
-        summary["taxTotal"] = round_currency(summary["taxTotal"] + row.get("taxAmount", 0))
-        summary["arrearsTotal"] = round_currency(summary["arrearsTotal"] + max(0, row.get("expectedTotal", 0) - row.get("paidAmount", 0)))
+        summary["expectedTotal"] = round_currency(summary["expectedTotal"] + rental_amount(row.get("expectedTotal")))
+        summary["paidTotal"] = round_currency(summary["paidTotal"] + rental_amount(row.get("paidAmount")))
+        summary["rentTaxableTotal"] = round_currency(summary["rentTaxableTotal"] + rental_amount(row.get("rentAmount")))
+        summary["utilitiesAdvanceTotal"] = round_currency(summary["utilitiesAdvanceTotal"] + rental_amount(row.get("utilitiesAdvance")))
+        summary["utilitiesPaidTotal"] = round_currency(summary["utilitiesPaidTotal"] + rental_amount(row.get("utilitiesPaidAmount")))
+        summary["utilitiesBalanceTotal"] = round_currency(summary["utilitiesBalanceTotal"] + rental_amount(row.get("utilitiesBalanceAmount")))
+        summary["otherChargesTotal"] = round_currency(summary["otherChargesTotal"] + rental_amount(row.get("otherCharges")))
+        summary["managementMarekTotal"] = round_currency(summary["managementMarekTotal"] + rental_amount(row.get("managementMarekAmount")))
+        summary["ownerIncomeTotal"] = round_currency(summary["ownerIncomeTotal"] + rental_amount(row.get("ownerIncomeAmount")))
+        summary["taxTotal"] = round_currency(summary["taxTotal"] + rental_amount(row.get("taxAmount")))
+        summary["arrearsTotal"] = round_currency(
+            summary["arrearsTotal"] + max(0, rental_amount(row.get("expectedTotal")) - rental_amount(row.get("paidAmount")))
+        )
 
     return summary
 
@@ -2358,6 +2365,12 @@ def build_rental_overview(month_value, year_value):
             "managementMarek": "Zarządzanie Marek",
             "ownerIncome": "Mój przychód",
         },
+        "hasSettlementData": month_summary["hasSettlementData"] or any(month["summary"]["hasSettlementData"] for month in year_months),
+        "calculationStatus": "legacy_payment_only",
+        "calculationNotice": (
+            "Widok korzysta teraz tylko z obecnego statusu wpłat najemców. "
+            "Podatek, Mój przychód, media i Zarządzanie Marek nie są liczone bez danych rozliczeniowych z Excela."
+        ),
         "monthRows": month_rows,
         "monthSummary": month_summary,
         "yearMonths": year_months,
@@ -2477,15 +2490,11 @@ def preview_bank_statement_import(payload):
         raise ValueError("bank_import_too_large")
 
     suffix = Path(file_name).suffix.lower()
-    if suffix not in {".csv", ".txt", ".xlsx", ".pdf"}:
+    if suffix not in {".csv", ".txt"}:
         raise ValueError("unsupported_bank_import_format")
 
     warnings = []
-    transactions = []
-    if suffix in {".csv", ".txt"}:
-        transactions = parse_bank_statement_csv(content)
-    else:
-        warnings.append("Parser XLSX/PDF jest przygotowany jako bezpieczny punkt wejścia; pełna ekstrakcja będzie kolejnym etapem.")
+    transactions = parse_bank_statement_csv(content)
 
     suggestions = build_bank_import_suggestions(transactions)
     return {

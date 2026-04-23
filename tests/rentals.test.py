@@ -82,6 +82,14 @@ def test_rental_overview_uses_existing_tenant_state():
         assert overview["monthSummary"]["paidTenants"] == 1
         assert overview["monthSummary"]["expectedTotal"] == 4000.0
         assert overview["monthSummary"]["paidTotal"] == 1800.0
+        assert overview["hasSettlementData"] is False
+        assert overview["calculationStatus"] == "legacy_payment_only"
+        assert overview["monthSummary"]["rentTaxableTotal"] == 0.0
+        assert overview["monthSummary"]["taxTotal"] == 0.0
+        assert overview["monthRows"][0]["rentAmount"] is None
+        assert overview["monthRows"][0]["taxAmount"] is None
+        assert overview["yearTax"]["taxableIncome"] == 0.0
+        assert overview["yearTax"]["tax"] == 0.0
         assert len(overview["yearMonths"]) == 12
 
     with_temp_db(run)
@@ -106,8 +114,27 @@ def test_bank_import_preview_matches_csv_transaction_to_tenant():
     with_temp_db(run)
 
 
+def test_bank_import_preview_rejects_unvalidated_binary_formats():
+    def run():
+        seed_state()
+        try:
+            server.preview_bank_statement_import(
+                {
+                    "fileName": "wyciag.xlsx",
+                    "content": "binary-placeholder",
+                }
+            )
+        except ValueError as error:
+            assert str(error) == "unsupported_bank_import_format"
+        else:
+            raise AssertionError("XLSX preview should be blocked until the parser is validated")
+
+    with_temp_db(run)
+
+
 if __name__ == "__main__":
     test_rental_schema_tables_are_created()
     test_rental_overview_uses_existing_tenant_state()
     test_bank_import_preview_matches_csv_transaction_to_tenant()
+    test_bank_import_preview_rejects_unvalidated_binary_formats()
     print("rentals tests: OK")

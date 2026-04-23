@@ -527,9 +527,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
             apiFetchRentalsOverview,
             apiPreviewRentalBankImport,
             formatCurrencyPLN,
-            showToast,
-            markTenantAsPaid,
-            undoTenantPayment
+            showToast
         });
 
         function getMonthlyOverviewMonthValue(cardId) {
@@ -1735,8 +1733,7 @@ const parseUserDateToISO = importedParseUserDateToISO;
             switchRentalView,
             changeRentalMonth,
             changeRentalYear,
-            previewBankImport,
-            openTenantPaymentsModal: openRentalsPanel
+            previewBankImport
         });
 
         // Global keyboard shortcuts for modals and forms

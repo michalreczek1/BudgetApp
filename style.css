@@ -1906,6 +1906,11 @@
             font-size: 0.9rem;
         }
 
+        .rental-muted {
+            color: var(--text-muted);
+            font-weight: 800;
+        }
+
         .rental-status {
             display: inline-flex;
             align-items: center;
