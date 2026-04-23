@@ -79,16 +79,6 @@ export function createTenantPaymentsController({
         }
     }
 
-    function refreshRentalsPanelIfAvailable() {
-        if (
-            typeof window !== 'undefined' &&
-            typeof window.renderRentalsPanel === 'function' &&
-            document.getElementById('rentalsPanel')
-        ) {
-            window.renderRentalsPanel();
-        }
-    }
-
     function getTenantMonthValue() {
         return getSelectedMonthValue('tenantPaymentsMonth', getMonthInputValue);
     }
@@ -168,7 +158,7 @@ export function createTenantPaymentsController({
             listElement.innerHTML = `
                 <div class="tenant-report-empty">
                     <span>Dodaj lokatorów w module, aby zobaczyć szybki raport.</span>
-                    <button type="button" class="btn btn-secondary tenant-open-btn" onclick="openTenantPaymentsModal()">Otwórz wpłaty najemców</button>
+                    <button type="button" class="btn btn-secondary tenant-open-btn" onclick="openTenantPaymentsModal()">Otwórz moduł</button>
                 </div>
             `;
             return;
@@ -387,7 +377,6 @@ export function createTenantPaymentsController({
         renderTenantDashboardReport();
         renderTenantPayments();
         await flushStateSave();
-        refreshRentalsPanelIfAvailable();
         showToast(`Zaksięgowano wpłatę: ${profile.name}`, 'success');
     }
 
@@ -436,7 +425,6 @@ export function createTenantPaymentsController({
         renderTenantDashboardReport();
         renderTenantPayments();
         await flushStateSave();
-        refreshRentalsPanelIfAvailable();
         showToast('Cofnięto wpłatę najemcy.', 'success');
     }
 
