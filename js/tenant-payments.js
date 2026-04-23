@@ -158,7 +158,7 @@ export function createTenantPaymentsController({
             listElement.innerHTML = `
                 <div class="tenant-report-empty">
                     <span>Dodaj lokatorów w module, aby zobaczyć szybki raport.</span>
-                    <button type="button" class="btn btn-secondary tenant-open-btn" onclick="openTenantPaymentsModal()">Otwórz moduł</button>
+                    <button type="button" class="btn btn-secondary tenant-open-btn" onclick="openRentalsPanel()">Otwórz panel Najem</button>
                 </div>
             `;
             return;
@@ -274,6 +274,11 @@ export function createTenantPaymentsController({
     }
 
     function openTenantPaymentsModal() {
+        if (typeof window !== 'undefined' && typeof window.openRentalsPanel === 'function') {
+            window.openRentalsPanel();
+            return;
+        }
+
         const monthInput = document.getElementById('tenantPaymentsMonth');
         if (monthInput) {
             monthInput.value = getMonthInputValue(new Date());
